@@ -1,0 +1,153 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+from environment_buildup import UAVEnvironment2D
+from path_evaluator import PathEvaluator
+
+class PSOPlanner:
+    def __init__(self, num_particles=100, num_waypoints=8, max_iter=150):
+        """
+        初始化 PSO 路径规划器
+        :param num_particles: 粒子数量（种群大小）
+        :param num_waypoints: 每条路径的中间控制点数量
+        :param max_iter: 最大迭代次数
+        """
+        self.evaluator = PathEvaluator()
+        self.env = self.evaluator.env
+        
+        self.num_particles = num_particles
+        self.num_waypoints = num_waypoints
+        self.max_iter = max_iter
+        
+        # PSO 核心参数
+        self.w = 0.7  # 惯性权重 (探索与开发的平衡)
+        self.c1 = 1.5 # 个体认知因子 (向自己的历史最优靠拢)
+        self.c2 = 1.5 # 社会认知因子 (向群体历史最优靠拢)
+        
+        # 边界约束
+        self.x_bounds = self.env.x_bounds
+        self.y_bounds = self.env.y_bounds
+        
+        # 初始化粒子位置和速度
+        # 形状为 (粒子数, 中间点数, 2维坐标)
+        self.particles = self._initialize_particles()
+        self.velocities = np.zeros((num_particles, num_waypoints, 2))
+        
+        # 记录个体最优 (pbest) 和全局最优 (gbest)
+        self.pbest_pos = np.copy(self.particles)
+        self.pbest_scores = np.full(num_particles, np.inf)
+        
+        self.gbest_pos = None
+        self.gbest_score = np.inf
+
+    def _initialize_particles(self):
+        "初始化 在起点和终点的连线附近生成随机点"
+        start = self.env.start_point
+        end = self.env.end_point
+        particles = np.zeros((self.num_particles, self.num_waypoints, 2))
+        
+        for i in range(self.num_particles):
+            # 在起点和终点之间均匀取点
+            x_vals = np.linspace(start[0], end[0], self.num_waypoints + 2)[1:-1]
+            y_vals = np.linspace(start[1], end[1], self.num_waypoints + 2)[1:-1]
+            
+            # 加入随机扰动 (噪音)，让粒子散布在地图各处
+            noise_x = np.random.uniform(-30, 30, self.num_waypoints)
+            noise_y = np.random.uniform(-30, 30, self.num_waypoints)
+            
+            # 限制在地图边界内
+            particles[i, :, 0] = np.clip(x_vals + noise_x, self.x_bounds[0], self.x_bounds[1])
+            particles[i, :, 1] = np.clip(y_vals + noise_y, self.y_bounds[0], self.y_bounds[1])
+            
+        return particles
+
+    def construct_full_path(self, particle):
+        """ 将起点、粒子(中间点)、终点拼接成一条完整的路径序列 """
+        path = [self.env.start_point]
+        path.extend(particle)
+        path.append(self.env.end_point)
+        return np.array(path)
+
+    def optimize(self):
+        """ PSO 主循环 """
+        best_scores_history = []
+        
+        print("开始 PSO 路径规划迭代...")
+        for iteration in range(self.max_iter):
+            # 1. 评估所有粒子并更新最优解
+            for i in range(self.num_particles):
+                current_particle = self.particles[i]
+                full_path = self.construct_full_path(current_particle)
+                
+                # 调用你的评价器打分
+                score = self.evaluator.calculate_fitness(full_path)
+                
+                # 更新个体最优
+                if score < self.pbest_scores[i]:
+                    self.pbest_scores[i] = score
+                    self.pbest_pos[i] = np.copy(current_particle)
+                    
+                # 更新全局最优
+                if score < self.gbest_score:
+                    self.gbest_score = score
+                    self.gbest_pos = np.copy(current_particle)
+                    
+            # 2. 更新粒子的速度和位置
+            for i in range(self.num_particles):
+                # 生成随机矩阵
+                r1 = np.random.rand(self.num_waypoints, 2)
+                r2 = np.random.rand(self.num_waypoints, 2)
+                
+                # 速度更新公式
+                cognitive_velocity = self.c1 * r1 * (self.pbest_pos[i] - self.particles[i])
+                social_velocity = self.c2 * r2 * (self.gbest_pos - self.particles[i])
+                self.velocities[i] = self.w * self.velocities[i] + cognitive_velocity + social_velocity
+                
+                # 位置更新
+                self.particles[i] += self.velocities[i]
+                
+                # 强制边界约束 (防止飞出地图)
+                self.particles[i, :, 0] = np.clip(self.particles[i, :, 0], self.x_bounds[0], self.x_bounds[1])
+                self.particles[i, :, 1] = np.clip(self.particles[i, :, 1], self.y_bounds[0], self.y_bounds[1])
+                
+            best_scores_history.append(self.gbest_score)
+            
+            # 每 20 代打印一次进度
+            if (iteration + 1) % 20 == 0 or iteration == 0:
+                print(f"迭代 {iteration+1:03d}/{self.max_iter} | 全局最优得分: {self.gbest_score:.2f}")
+                
+        print("规划完成！")
+        best_full_path = self.construct_full_path(self.gbest_pos)
+        return best_full_path, best_scores_history
+
+    def plot_result(self, best_path, score_history):
+        """ 绘制结果：左图为地图路径，右图为收敛曲线 """
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+        
+        # 1. 绘制地图和路径
+        self.env.draw_environment(ax=ax1)
+        ax1.plot(best_path[:, 0], best_path[:, 1], color='#ff5722', linewidth=3, marker='o', label='PSO Best Path')
+        ax1.legend()
+        
+        # 2. 绘制收敛曲线
+        ax2.plot(score_history, color='#1976d2', linewidth=2)
+        ax2.set_title('PSO Convergence Curve', fontweight='bold')
+        ax2.set_xlabel('Iteration')
+        ax2.set_ylabel('Fitness Score (Lower is better)')
+        ax2.grid(True, linestyle=':')
+        
+        plt.tight_layout()
+        plt.show()
+
+
+# test
+
+if __name__ == "__main__":
+    # 参数
+    planner = PSOPlanner(num_particles=200, num_waypoints=8, max_iter=300)
+    
+    # 运行优化
+    best_path, history = planner.optimize()
+    
+    # 可视化展示
+    planner.plot_result(best_path, history)

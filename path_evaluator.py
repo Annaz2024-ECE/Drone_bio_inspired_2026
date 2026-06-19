@@ -104,7 +104,7 @@ class PathEvaluator:
             
             if not visited:
                 missed_count += 1
-                print(f"警告: 任务失败！无人机未进入巡检区 [{target['name']}]")
+                # print(f"警告: 任务失败！无人机未进入巡检区 [{target['name']}]")
                 
         return missed_count
 

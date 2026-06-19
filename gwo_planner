@@ -1,0 +1,163 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from environment_buildup import UAVEnvironment2D
+from path_evaluator import PathEvaluator
+
+class GWOPlanner:
+    def __init__(self, evaluator, num_wolves=50, max_iter=300, num_waypoints=6):
+        """
+        初始化原始灰狼算法
+        :param evaluator: PathEvaluator 对象，用于计算路径适应度
+        :param num_wolves: 狼群数量 (种群大小)
+        :param max_iter: 最大迭代次数
+        :param num_waypoints: 无人机路径中的中间航点数量
+        """
+        self.evaluator = evaluator
+        self.env = evaluator.env
+        self.num_wolves = num_wolves
+        self.max_iter = max_iter
+        self.num_waypoints = num_waypoints
+        
+        # 每一个中间航点包含 X 和 Y 坐标，因此搜索空间的维度是 num_waypoints * 2
+        self.dim = self.num_waypoints * 2
+        self.lb = min(self.env.x_bounds[0], self.env.y_bounds[0])  # 地图坐标下界
+        self.ub = max(self.env.x_bounds[1], self.env.y_bounds[1])  # 地图坐标上界
+        
+        # 初始化 Alpha (最优), Beta (次优), Delta (第三优) 狼的位置和得分
+        # 因为我们要求最小值(适应度越低越好)，所以初始得分设为正无穷
+        self.alpha_pos = np.zeros(self.dim)
+        self.alpha_score = float("inf")
+        
+        self.beta_pos = np.zeros(self.dim)
+        self.beta_score = float("inf")
+        
+        self.delta_pos = np.zeros(self.dim)
+        self.delta_score = float("inf")
+        
+        # 随机初始化狼群位置矩阵: 维度为 (num_wolves, dim)
+        self.positions = np.random.uniform(self.lb, self.ub, (self.num_wolves, self.dim))
+        
+        # 记录每代最佳适应度以便画图
+        self.convergence_curve = []
+
+    def _wolf_to_path(self, wolf_pos):
+        """
+        将一维的狼位置向量还原为无人机的完整二维路径坐标
+        返回格式: [Start -> Waypoint1 -> ... -> WaypointN -> End]
+        """
+        waypoints = wolf_pos.reshape((self.num_waypoints, 2))
+        full_path = np.vstack([self.env.start_point, waypoints, self.env.end_point])
+        return full_path
+
+    def optimize(self):
+        """ 运行灰狼优化主循环 """
+        for l in range(self.max_iter):
+            for i in range(self.num_wolves):
+                # 1. 边界限制：强制把飞出地图的坐标拉回地图边缘
+                self.positions[i] = np.clip(self.positions[i], self.lb, self.ub)
+                
+                # 2. 计算当前狼的适应度
+                current_path = self._wolf_to_path(self.positions[i])
+                fitness = self.evaluator.calculate_fitness(current_path)
+                
+                # 3. 更新 Alpha, Beta, Delta 狼
+                if fitness < self.alpha_score:
+                    # 原来的 alpha 退位给 beta，beta 退位给 delta
+                    self.delta_score = self.beta_score
+                    self.delta_pos = self.beta_pos.copy()
+                    self.beta_score = self.alpha_score
+                    self.beta_pos = self.alpha_pos.copy()
+                    # 设立新的 alpha
+                    self.alpha_score = fitness
+                    self.alpha_pos = self.positions[i].copy()
+                    
+                elif fitness < self.beta_score:
+                    self.delta_score = self.beta_score
+                    self.delta_pos = self.beta_pos.copy()
+                    self.beta_score = fitness
+                    self.beta_pos = self.positions[i].copy()
+                    
+                elif fitness < self.delta_score:
+                    self.delta_score = fitness
+                    self.delta_pos = self.positions[i].copy()
+            
+            # 4. 更新收敛控制参数 a (随着迭代从 2 线性递减到 0)
+            a = 2.0 - l * (2.0 / self.max_iter)
+            
+            # 5. 根据领导者们的位置更新整个狼群的位置
+            for i in range(self.num_wolves):
+                for j in range(self.dim):
+                    # --- Alpha 狼的影响 ---
+                    r1, r2 = np.random.random(), np.random.random()
+                    A1 = 2 * a * r1 - a
+                    C1 = 2 * r2
+                    D_alpha = abs(C1 * self.alpha_pos[j] - self.positions[i, j])
+                    X1 = self.alpha_pos[j] - A1 * D_alpha
+                    
+                    # --- Beta 狼的影响 ---
+                    r1, r2 = np.random.random(), np.random.random()
+                    A2 = 2 * a * r1 - a
+                    C2 = 2 * r2
+                    D_beta = abs(C2 * self.beta_pos[j] - self.positions[i, j])
+                    X2 = self.beta_pos[j] - A2 * D_beta
+                    
+                    # --- Delta 狼的影响 ---
+                    r1, r2 = np.random.random(), np.random.random()
+                    A3 = 2 * a * r1 - a
+                    C3 = 2 * r2
+                    D_delta = abs(C3 * self.delta_pos[j] - self.positions[i, j])
+                    X3 = self.delta_pos[j] - A3 * D_delta
+                    
+                    # 取三者的平均值作为该维度的新位置
+                    self.positions[i, j] = (X1 + X2 + X3) / 3.0
+            
+            self.convergence_curve.append(self.alpha_score)
+            
+            # 打印训练进度
+            if (l + 1) % 20 == 0 or l == 0:
+                print(f"迭代次数 {l+1}/{self.max_iter}, 当前最佳适应度: {self.alpha_score:.2f}")
+                
+        # 迭代结束，返回最优的完整路径
+        best_full_path = self._wolf_to_path(self.alpha_pos)
+        return best_full_path, self.alpha_score, self.convergence_curve
+
+    def plot_result(self, best_path, convergence_curve):
+        """ 绘制结果：左图为地图路径，右图为收敛曲线 """
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+        
+        # 1. 绘制地图和路径
+        self.env.draw_environment(ax=ax1)
+        ax1.plot(best_path[:, 0], best_path[:, 1], color='#ff5722', linewidth=2.5, marker='o', label='GWO Best Path')
+        # 显式指定图例位置，避免挡住路径
+        ax1.legend(loc='upper right', fontsize=10) 
+        
+        # 2. 绘制收敛曲线
+        ax2.plot(convergence_curve, color='#1976d2', linewidth=2)
+        ax2.set_title('GWO Convergence Curve', fontsize=12, fontweight='bold')
+        ax2.set_xlabel('Iteration')
+        ax2.set_ylabel('Fitness Score (Log Scale)')
+        
+        # 【优化】使用对数坐标轴，完美展现前期跳出惩罚、后期精细优化的全过程
+        ax2.set_yscale('log') 
+        
+        ax2.grid(True, linestyle=':', alpha=0.6)
+        
+        plt.tight_layout()
+        plt.show()
+
+
+# ===================== 测试与可视化运行模块 =====================
+if __name__ == "__main__":
+    # 实例化您的环境与评估器
+    evaluator = PathEvaluator()
+    
+    # 启动 GWO 规划
+    # 参数建议：因为包含了两个检查区域并且要绕开大量建筑，设置6~8个中间航点较为理想
+    print("GWO路径规划...")
+    gwo_planner = GWOPlanner(evaluator, num_wolves=60, max_iter=300, num_waypoints=8)
+    
+    best_path, best_score, convergence_curve = gwo_planner.optimize()
+    print(f"规划完成！最终路径得分: {best_score:.2f}")
+    gwo_planner.plot_result(best_path, convergence_curve)
+    
+    
