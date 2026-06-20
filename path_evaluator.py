@@ -17,7 +17,7 @@ class PathEvaluator:
         # 定义最大允许转弯角度
         self.max_turn_angle = 90.0
 
-    #B样条——但是太过于丝滑，狭窄地区不如线段。
+    # B样条——但是太过于丝滑，狭窄地区不如线段。
     # def generate_bspline_path(self, waypoints, num_points=100):
     #     """
     #     将稀疏的关键点(waypoints)转换为密集的平滑曲线点
@@ -54,6 +54,39 @@ class PathEvaluator:
     #     smooth_path = np.column_stack((x_new, y_new))
     #     return smooth_path
 
+    def generate_chaikin_path(self, waypoints, iterations=4):
+        """
+        Chaikin 割角算法：专为狭窄走廊设计的局部平滑算法。
+        只切内角绝不向外膨胀甩尾, 100% 继承原折线的安全性！
+        把每个转弯角，变的圆润，减少转弯角带来的惩罚
+        """
+        pts = np.array(waypoints)
+        # 迭代次数越多，拐角处越圆滑
+        for _ in range(iterations):
+            new_pts = [pts[0]] # 始终保留起点
+            for i in range(len(pts) - 1):
+                p0 = pts[i]
+                p1 = pts[i+1]
+                # 在线段的 25% 和 75% 处打两个新点，把尖角“切掉”
+                Q = 0.75 * p0 + 0.25 * p1
+                R = 0.25 * p0 + 0.75 * p1
+                new_pts.extend([Q, R])
+            new_pts.append(pts[-1]) # 始终保留终点
+            pts = np.array(new_pts)
+        return pts
+
+    # 计算原始航点的距离，推荐离得远一点，不要太近。
+    def calculate_spacing_penalty(self, raw_waypoints, min_dist=5.0):
+        penalty = 0.0
+        # 遍历所有原始点，算两两之间的距离
+        for i in range(len(raw_waypoints) - 1):
+            dist = np.linalg.norm(raw_waypoints[i+1] - raw_waypoints[i])
+            if dist < min_dist:
+                # 距离越近，弹簧压缩越厉害，惩罚大幅提高
+                # 设小权重，不影响绝对的路径判断
+                penalty += ((min_dist - dist) ** 2) * 5.0
+        return penalty
+
     def calculate_path_length(self, path_points):
         """ 计算路径总长度 """
         total_length = 0.0
@@ -86,62 +119,90 @@ class PathEvaluator:
         return np.linalg.norm(point - projection)
 
     # 检查路径漏掉了几个目标区域
-    def count_missed_targets(self, path_points):
-        missed_count = 0
+    def calculate_target_penalty(self, path_points):
+        total_target_penalty = 0.0
+        
         for target in self.env.target_areas:
             center = target['center']
             radius = target['radius']
-            visited = False
+            min_dist_to_target = float('inf')
             
-            # 遍历路径的每一段，看看有没有穿过目标圆
+            # 找到整条航线离这个目标区圆心最近的距离
             for i in range(len(path_points) - 1):
                 p1 = path_points[i]
                 p2 = path_points[i+1]
                 dist = self.point_to_segment_distance(center, p1, p2)
-                if dist <= radius:
-                    visited = True
-                    break # 这个区域查岗通过，看下一个区域
+                if dist < min_dist_to_target:
+                    min_dist_to_target = dist
             
-            if not visited:
-                missed_count += 1
-                # print(f"警告: 任务失败！无人机未进入巡检区 [{target['name']}]")
+            # 如果最近的距离还是大于半径，说明没进去
+            if min_dist_to_target > radius:
+                # 计算偏离了多少米
+                missed_distance = min_dist_to_target - radius
+                # 梯度惩罚：50万基础 + 每偏离1米多罚 1万分
+                total_target_penalty += self.penalties['missed_target'] + missed_distance * 10000.0
                 
-        return missed_count
+        return total_target_penalty
 
     def calculate_fitness(self, path_points):
         distance = self.calculate_path_length(path_points)
         penalty = 0.0
         
-        # 1. 检查物理碰撞和安全边距
+        # 1. 【线性升级】检查物理碰撞和安全边距
         for i in range(len(path_points) - 1):
             p1 = path_points[i]
             p2 = path_points[i+1]
             
-            # 物理撞墙 (边距为0)
+            # 先查最严重的：真实物理撞墙 (边距为0)
             if self.env.is_segment_collision(p1, p2, safe_margin=0.0):
-                # print(f"撞墙")
                 penalty += self.penalties['fatal_collision']
+                continue # 已经撞毁了，没必要算外围的软边距了
                 
-            # 是否侵入了安全缓冲带 (边距为1.0)
-            elif self.env.is_segment_collision(p1, p2, safe_margin=1.0):
-                # print(f"擦边.")
-                penalty += self.penalties['margin_violation']
+            # 洋葱皮线性惩罚模型：把 1.0 的安全区切成 5 层
+            # 距离越近，穿透的层数越多，累计惩罚越大
+            margin_layers = [1.0, 0.8, 0.6, 0.4, 0.2]
+            # 每穿透一层，扣除总软惩罚的 1/5 (即 1000 分)
+            layer_penalty = self.penalties['margin_violation'] / len(margin_layers) 
+            
+            for m in margin_layers:
+                if self.env.is_segment_collision(p1, p2, safe_margin=m):
+                    penalty += layer_penalty
 
-        # 2. 检查急转弯 （累加扣分）
+        # 2. 急转弯与平滑度连续惩罚
         for i in range(len(path_points) - 2):
             angle = self.calculate_turn_angle(path_points[i], path_points[i+1], path_points[i+2])
+            
+            # 设定死区：小于 5 度的微小弯（B样条的平滑点）不扣分
+            if angle > 5.0:
+                # 非线性惩罚：角度越大，惩罚成指数级暴增！
+                # 减去 5 是为了让惩罚在突破死区时是平滑过渡的
+                penalty += ((angle - 5.0) ** 2) * 0.5  
+                
+            # 依然保留死亡急转弯的底线（比如超过 90 度直接判死刑）
             if angle > self.max_turn_angle:
-                # print(f"急转弯警告")
                 penalty += self.penalties['sharp_turn']
 
-        # 3. 检查漏掉的巡检区域 
-        missed_count = self.count_missed_targets(path_points)
-        if missed_count > 0:
-            penalty += missed_count * self.penalties['missed_target']
+        # 3. 调用引力梯度目标惩罚
+        penalty += self.calculate_target_penalty(path_points)
                 
-        # 最终得分 = 基础距离 + 所有的惩罚总和
+        # 最终得分
         return distance + penalty
 
+    def evaluate_pso_particle(self, raw_waypoints):
+        """
+        最后结果输出
+        """
+        # 1. 先算原始点的弹簧排斥力惩罚
+        spacing_penalty = self.calculate_spacing_penalty(raw_waypoints, min_dist=5.0)
+        
+        # 2. 将原始点转化为极其安全的 Chaikin 丝滑曲线
+        smooth_path = self.generate_chaikin_path(raw_waypoints, iterations=4)
+        
+        # 3. 拿平滑曲线去算：洋葱皮防撞、非线性转弯惩罚、目标区引力
+        base_score = self.calculate_fitness(smooth_path)
+        
+        # 4. 最终总分合并！
+        return base_score + spacing_penalty
 
 # syc自测用；debug用
 if __name__ == "__main__":
@@ -152,10 +213,24 @@ if __name__ == "__main__":
     # ==========================================
     
     # 1. 【完美基准线】: 不撞墙、不擦边、不急转、全打卡。
-    path_perfect = np.array([
-        [43.0,  3.0], [43.0, 27.0], [41.0, 29.0], [28.0, 29.0], 
-        [26.0, 31.0], [26.0, 69.0], [28.0, 71.0], [76.0, 71.0], 
-        [78.0, 73.0], [78.0, 90.0], [75.0, 93.0], [51.0, 94.0]
+    path_bspline_perfect = np.array([
+        [43.0,  3.0],   # 0. 起点
+        [43.0, 25.0],   # 1. 强力锚点：锁定南侧纵向直线
+        [43.0, 28.0],   # 2. 强力锚点：减速准备转向
+        [41.0, 29.0],   # 3. 柔和切角
+        [29.0, 29.0],   # 4. 强力锚点：锁定横向安全走廊 (Y=29 完美穿过缝隙)
+        [27.0, 31.0],   # 5. 柔和切角 (避开 3A 建筑的底角)
+        [27.0, 35.0],   # 6. 强力锚点：锁定西侧纵向走廊 (X=27 完美夹在两楼中间)
+        [27.0, 65.0],   # 7. 纵向直飞 (顺路打卡 West Area)
+        [27.0, 69.0],   # 8. 强力锚点：准备转向
+        [29.0, 71.0],   # 9. 柔和切角
+        [71.0, 71.0],   # 10. 强力锚点：锁定北部横向走廊 (Y=71)
+        [76.0, 71.0],   # 11. 强力锚点：准备转向 (顺路打卡 East Area)
+        [78.0, 73.0],   # 12. 柔和切角
+        [78.0, 88.0],   # 13. 强力锚点：锁定东侧纵向走廊 (X=78)
+        [78.0, 92.0],   # 14. 强力锚点：准备转向
+        [75.0, 94.0],   # 15. 柔和切角，瞄准终点
+        [51.0, 94.0]    # 16. 终点
     ])
 
     # 2. 【莽夫直线】: 只有起点和终点。直接穿透整个校区，无视建筑物和巡检区。
@@ -193,35 +268,54 @@ if __name__ == "__main__":
 
     # 将测试用例打包
     test_cases = [
-        ("完美标杆路线", path_perfect),
+        ("完美标杆路线", path_bspline_perfect),
         ("莽夫直线 (全撞+漏打卡)", path_lazy_straight),
         ("擦边狂魔 (危险边缘试探)", path_margin_graze),
         ("死亡折返跑 (全是急转弯)", path_sharp_turns),
         ("漏打卡路线 (安全但忘做任务)", path_missed_target)
     ]
 
-    # 批量执行测试并打印报告
+    # ==========================================
+    # 批量执行测试并打印报告 (终极封装模式！)
+    # ==========================================
     print("=" * 50)
-    print("开始执行 PSO 适应度函数压力测试...")
+    print("🚀 开始执行 终极黑盒API 压力测试...")
     print("=" * 50)
 
-    for name, path in test_cases:
-        score = evaluator.calculate_fitness(path)
+    for name, raw_path in test_cases:
+        # 【核心修改】一行代码搞定全部：排斥力计算 + 曲线平滑 + 综合打分！
+        # 这就是未来 C 同学在 PSO 循环里唯一需要写的代码！
+        score = evaluator.evaluate_pso_particle(raw_path)
+        
         print(f"【{name}】")
-        # 如果分数大于 1000，说明吃到了惩罚，用红色警告色打印
         if score > 1000:
             print(f"   最终得分: \033[91m{score:,.2f}\033[0m")
         else:
-            print(f"   最终得分: \033[92m{score:,.2f}\033[0m (纯纯的距离分！)")
+            print(f"   最终得分: \033[92m{score:,.2f}\033[0m (极致丝滑安全的完美分数！)")
         print("-" * 50)
 
-    # 选一个有代表性的画出来看看 
-    path_to_draw = path_margin_graze
+    # ==========================================
+    # 画图验证 (对比原始控制点和 Chaikin 平滑曲线)
+    # ==========================================
+    # 选一个有代表性的画出来看看，这里我们选那个“完美标杆路线”
+    path_to_draw = path_bspline_perfect 
+    
+    # 【核心修复 2】画图前也用 Chaikin 算法生成曲线，并且变量名要写对！
+    smooth_path_to_draw = evaluator.generate_chaikin_path(path_to_draw, iterations=4)
     
     fig, ax = plt.subplots(figsize=(10, 10))
     evaluator.env.draw_environment(ax)
-    ax.plot(path_to_draw[:, 0], path_to_draw[:, 1], color='#FF5722', linestyle='-', 
-            linewidth=3, marker='o', markersize=8, markerfacecolor='white', markeredgewidth=2)
-    ax.set_title("Test Path Visualization", fontsize=14, fontweight='bold')
+    
+    # 1. 画出底层的控制点 (用虚线和叉叉表示，代表 C 同学 PSO 吐出来的坐标)
+    ax.plot(path_to_draw[:, 0], path_to_draw[:, 1], color='gray', linestyle='--', 
+            linewidth=1.5, marker='x', markersize=8, label='PSO Control Waypoints')
+            
+    # 2. 画出真正被无人机飞行的 Chaikin 平滑曲线 (用亮丽的紫色实线)
+    ax.plot(smooth_path_to_draw[:, 0], smooth_path_to_draw[:, 1], color='#FF007F', linestyle='-', 
+            linewidth=3, label='Chaikin Flight Path')
+            
+    # 把标题也改成 Chaikin
+    ax.set_title("Chaikin Corner-Cutting Path Visualization", fontsize=14, fontweight='bold')
+    ax.legend(loc='upper right')
     plt.tight_layout()
     plt.show()
