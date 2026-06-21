@@ -10,7 +10,7 @@ class PathEvaluator:
         # 阶梯式惩罚权重字典
         self.penalties = {
             'fatal_collision': 1000000.0,  # 撞墙 
-            'missed_target': 500000.0,     # 漏掉目标区
+            'missed_target': 1000000.0,     # 漏掉目标区
             'sharp_turn': 10000.0,         # 死亡急转弯
             'margin_violation': 5000.0     # 侵入安全边距
         }
@@ -135,12 +135,12 @@ class PathEvaluator:
                 if dist < min_dist_to_target:
                     min_dist_to_target = dist
             
-            # 如果最近的距离还是大于半径，说明没进去
+           # 1. 如果还在圈外：启动“核武级”惩罚！
             if min_dist_to_target > radius:
-                # 计算偏离了多少米
                 missed_distance = min_dist_to_target - radius
-                # 梯度惩罚：50万基础 + 每偏离1米多罚 1万分
-                total_target_penalty += self.penalties['missed_target'] + missed_distance * 10000.0
+                # 基础惩罚从 50万 提升到 100万
+                # 距离偏离梯度的惩罚从 1万 提升到 5万/米！
+                total_target_penalty += 1000000.0 + (missed_distance * 50000.0)
                 
         return total_target_penalty
 
@@ -162,8 +162,12 @@ class PathEvaluator:
             # 距离越近，穿透的层数越多，累计惩罚越大
             margin_layers = [1.0, 0.8, 0.6, 0.4, 0.2]
             # 每穿透一层，扣除总软惩罚的 1/5 (即 1000 分)
-            layer_penalty = self.penalties['margin_violation'] / len(margin_layers) 
-            
+            layer_penalty = self.penalties['margin_violation'] / len(margin_layers)
+
+            # 先查最大的 1.0 圈
+            if not self.env.is_segment_collision(p1, p2, safe_margin=1.0):
+                continue # 如果最外围都是安全的，直接跳过当前线段
+
             for m in margin_layers:
                 if self.env.is_segment_collision(p1, p2, safe_margin=m):
                     penalty += layer_penalty
@@ -196,7 +200,7 @@ class PathEvaluator:
         spacing_penalty = self.calculate_spacing_penalty(raw_waypoints, min_dist=5.0)
         
         # 2. 将原始点转化为极其安全的 Chaikin 丝滑曲线
-        smooth_path = self.generate_chaikin_path(raw_waypoints, iterations=4)
+        smooth_path = self.generate_chaikin_path(raw_waypoints, iterations=1)
         
         # 3. 拿平滑曲线去算：洋葱皮防撞、非线性转弯惩罚、目标区引力
         base_score = self.calculate_fitness(smooth_path)
