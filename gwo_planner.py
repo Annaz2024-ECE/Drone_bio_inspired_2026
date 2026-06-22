@@ -135,9 +135,19 @@ class GWOPlanner:
                     self.delta_pos = self.positions[i].copy()
             
             # 4. 更新收敛控制参数 a 
-            a = 2.0 - l * (2.0 / self.max_iter)
+            # a = 2.0 - l * (2.0 / self.max_iter)
+            a = 2.0 * (1.0 - (l / self.max_iter) ** 2)
             
             # 5. 根据领导者们的位置更新整个狼群的位置
+            # 【核心修改：计算动态权重】
+            # 因为分数越低越好，所以权重取分数的倒数。
+            # 加上 1e-8 是为了防止遇到完美 0 分时，发生“除以0”的崩溃报错
+            epsilon = 1e-8
+            w_alpha = 1.0 / (self.alpha_score + epsilon)
+            w_beta  = 1.0 / (self.beta_score + epsilon)
+            w_delta = 1.0 / (self.delta_score + epsilon)
+            w_sum = w_alpha + w_beta + w_delta
+            
             for i in range(self.num_wolves):
                 for j in range(self.dim):
                     # --- Alpha 狼的影响 ---
@@ -161,7 +171,8 @@ class GWOPlanner:
                     D_delta = abs(C3 * self.delta_pos[j] - self.positions[i, j])
                     X3 = self.delta_pos[j] - A3 * D_delta
                     
-                    self.positions[i, j] = (X1 + X2 + X3) / 3.0
+                    # 【核心修改：废除固定平均值，应用动态权重公式】
+                    self.positions[i, j] = (w_alpha * X1 + w_beta * X2 + w_delta * X3) / w_sum
             
             # 【核心修改 3：卡死监控与大地震机制】
             # 检查这代的分数和上代比有没有明显下降
@@ -173,7 +184,7 @@ class GWOPlanner:
 
             # 如果连续 30 代分数都卡住不动，触发大地震！
             if self.stagnation_count > 30:
-                print(f"⚠️ 迭代 {l+1}/{self.max_iter}: 卡死在 {self.alpha_score:,.2f} 分！触发大地震，全群重置寻路...")
+                print(f"迭代 {l+1}/{self.max_iter}: 卡死在 {self.alpha_score:,.2f} 分！触发大地震，全群重置寻路...")
                 
                 # 罢免现任头狼（将分数设为无限大）
                 self.alpha_score = float("inf")
@@ -229,7 +240,7 @@ if __name__ == "__main__":
     # 参数建议：因为包含了两个检查区域并且要绕开大量建筑，设置6~8个中间航点较为理想
     print("GWO路径规划...")
     # gwo_planner.py 最底部
-    gwo_planner = GWOPlanner(evaluator, num_wolves=60, max_iter=300, num_waypoints=8)
+    gwo_planner = GWOPlanner(evaluator, num_wolves=60, max_iter=300, num_waypoints=6)
     
     best_path, best_score, convergence_curve = gwo_planner.optimize()
     print(f"规划完成！最终路径得分: {best_score:.2f}")
@@ -239,5 +250,6 @@ if __name__ == "__main__":
 
     # 把丝滑的路线丢进去画图
     gwo_planner.plot_result(smooth_best_path, convergence_curve)
+    #gwo_planner.plot_result(best_path, convergence_curve)
         
     

@@ -17,6 +17,40 @@ class PathEvaluator:
         # 定义最大允许转弯角度
         self.max_turn_angle = 90.0
 
+    #画直线段的算法
+    # def apply_string_pulling(self, path_points):
+    #     """
+    #     拉线平滑算法：大刀阔斧地砍掉所有不必要的中间航点，强制拉直路线！
+    #     """
+    #     if len(path_points) <= 2:
+    #         return path_points
+
+    #     optimized_path = [path_points[0]]  # 始终保留起点
+    #     current_index = 0
+        
+    #     # 只要还没走到终点，就一直往后看
+    #     while current_index < len(path_points) - 1:
+    #         furthest_visible_index = current_index + 1
+            
+    #         # 从终点倒着往前看，寻找能一眼看到的“最远的那个点”
+    #         for next_index in range(len(path_points) - 1, current_index, -1):
+    #             p1 = path_points[current_index]
+    #             p2 = path_points[next_index]
+                
+    #             # 视线检测：用你的大边距 (1.0) 测试这条直连线会不会撞墙
+    #             if not self.env.is_segment_collision(p1, p2, safe_margin=1.0):
+    #                 furthest_visible_index = next_index
+    #                 break  # 找到了能直达的最远点，跳出循环！
+                    
+    #         # 把找到的这个最远点加入最终路线
+    #         optimized_path.append(path_points[furthest_visible_index])
+            
+    #         # 瞬移到这个最远点，继续往后看
+    #         current_index = furthest_visible_index
+            
+    #     return np.array(optimized_path)
+
+
     # B样条——但是太过于丝滑，狭窄地区不如线段。
     # def generate_bspline_path(self, waypoints, num_points=100):
     #     """
@@ -200,10 +234,14 @@ class PathEvaluator:
         spacing_penalty = self.calculate_spacing_penalty(raw_waypoints, min_dist=5.0)
         
         # 2. 将原始点转化为极其安全的 Chaikin 丝滑曲线
-        smooth_path = self.generate_chaikin_path(raw_waypoints, iterations=1)
+        smooth_path = self.generate_chaikin_path(raw_waypoints, iterations=3)
+
+        #直线段
+        # pulled_path = self.apply_string_pulling(raw_waypoints)
         
         # 3. 拿平滑曲线去算：洋葱皮防撞、非线性转弯惩罚、目标区引力
         base_score = self.calculate_fitness(smooth_path)
+        #base_score = self.calculate_fitness(pulled_path)
         
         # 4. 最终总分合并！
         return base_score + spacing_penalty
