@@ -28,12 +28,12 @@ class ACOPlanner:
         self.Q = Q
         self.num_segments = num_segments
         
-        # 预先计算 X 轴的分段界限（从起点到终点）
-        self.x_coords = np.linspace(self.env.start_point[0], self.env.end_point[0], self.num_segments + 1)
+        # 预先计算 Y 轴的分段界限（从起点到终点）
+        self.y_coords = np.linspace(self.env.start_point[1], self.env.end_point[1], self.num_segments + 1)
         
-        # 针对每个分段，生成离散的候选 Y 轴坐标（伪连续空间）
+        # 针对每个分段，生成离散的候选 X 轴坐标（伪连续空间）
         self.num_candidates = 30  # 每一列可选的高度数量
-        self.y_candidates = np.linspace(self.env.y_bounds[0], self.env.y_bounds[1], self.num_candidates)
+        self.x_candidates = np.linspace(self.env.x_bounds[0], self.env.x_bounds[1], self.num_candidates)
         
         # 初始化信息素矩阵：形状为 (分段数-1, 当前列候选点数, 下一列候选点数)
         # 第一阶段和最后一阶段分别连接起点和终点
@@ -51,8 +51,8 @@ class ACOPlanner:
 
     def run(self):
         """算法主循环"""
-        print("开始运行蚂蚁系统(ASO)路径规划...")
-        
+        print("开始运行蚂蚁系统(ACO)路径规划...")
+        score_history = [] #记录收敛曲线
         for idx in range(self.num_iterations):
             all_paths = []
             all_fitness = []
@@ -60,7 +60,7 @@ class ACOPlanner:
             for ant in range(self.num_ants):
                 path = self._construct_path()
                 # 使用你的评估器评定当前路径适应度得分（越低越好）
-                fitness = self.evaluator.calculate_fitness(path)
+                fitness = self.evaluator.evaluate_pso_particle(path)
                 
                 all_paths.append(path)
                 all_fitness.append(fitness)
@@ -70,15 +70,16 @@ class ACOPlanner:
                     self.global_best_fitness = fitness
                     self.global_best_path = path
             
+            score_history.append(self.global_best_fitness)
             # 更新信息素
             self._update_pheromones(all_paths, all_fitness)
             
-            # 每10代打印一次进度，如果找到了无惩罚的路径会更容易看出来（适应度 < 500）
-            if (idx + 1) % 10 == 0 or idx == 0:
+            # 每50代打印一次进度，如果找到了无惩罚的路径会更容易看出来（适应度 < 500）
+            if (idx + 1) % 50 == 0 or idx == 0:
                 print(f"迭代次数 [{idx+1}/{self.num_iterations}] -> 当前历史最佳适应度(Fitness): {self.global_best_fitness:.2f}")
                 
         print("优化完成！")
-        return self.global_best_path, self.global_best_fitness
+        return self.global_best_path, self.global_best_fitness, score_history
 
     def _construct_path(self):
         """单只蚂蚁构建一条从起点到终点的路点路径"""
@@ -88,7 +89,7 @@ class ACOPlanner:
         prob = np.copy(self.pheromone[0])
         # 启发式信息：计算第1列的所有候选点到终点以及到巡检区的启发距离
         for j in range(self.num_candidates):
-            p_next = np.array([self.x_coords[1], self.y_candidates[j]])
+            p_next = np.array([self.x_candidates[j], self.y_coords[1]])
             # 如果直接撞墙，人为压低概率
             if self.env.is_point_in_obstacle(p_next):
                 prob[j] *= 0.01
@@ -111,13 +112,13 @@ class ACOPlanner:
         
         # 2. 决定中间各列的选择
         for i in range(1, self.num_segments - 1):
-            curr_y_idx = path_idx[-1]
-            prob = np.copy(self.pheromone[i][curr_y_idx])
+            curr_x_idx = path_idx[-1] #修改XY 6.20
+            prob = np.copy(self.pheromone[i][curr_x_idx])
             
-            p_curr = np.array([self.x_coords[i], self.y_candidates[curr_y_idx]])
+            p_curr = np.array([self.x_candidates[curr_x_idx], self.y_coords[i]])
             
             for j in range(self.num_candidates):
-                p_next = np.array([self.x_coords[i+1], self.y_candidates[j]])
+                p_next = np.array([self.x_candidates[j], self.y_coords[i+1]])
                 
                 # 运动学粗筛：如果当前步和下一步直接导致撞墙，给与极大惩罚降低转移概率
                 if self.env.is_segment_collision(p_curr, p_next, safe_margin=0.0):
@@ -133,6 +134,7 @@ class ACOPlanner:
                 # 综合启发因子：既要看离终点的总距离，又要看离巡检目标的距离
                 heuristic = 1.0 / (dist_to_end + 0.3 * min_target_dist + 1e-4)
                 prob[j] = (prob[j] ** self.alpha) * (heuristic ** self.beta)
+            
             total_prob = np.sum(prob)
             if total_prob > 0:
                 prob /= total_prob
@@ -148,8 +150,8 @@ class ACOPlanner:
             
         # 3. 将索引组装为真正的全节点坐标路径集合 (包含起点和终点)
         actual_path = [self.env.start_point]
-        for i, y_idx in enumerate(path_idx):
-            actual_path.append(np.array([self.x_coords[i+1], self.y_candidates[y_idx]]))
+        for i, x_idx in enumerate(path_idx):
+            actual_path.append(np.array([self.x_candidates[x_idx], self.y_coords[i+1]]))
         actual_path.append(self.env.end_point)
         
         return np.array(actual_path)
@@ -174,16 +176,53 @@ class ACOPlanner:
             delta_p = self.Q / (fitness + 1e-4)
             
             # 反推路径在候选Y矩阵里的索引位置
-            y_indices = []
+            x_indices = []
             for p in path[1:-1]:
-                idx = np.argmin(np.abs(self.y_candidates - p[1]))
-                y_indices.append(idx)
+                idx = np.argmin(np.abs(self.x_candidates - p[0]))
+                x_indices.append(idx)
                 
             # 叠加到对应的转移路径上
-            self.pheromone[0][y_indices[0]] += delta_p
-            for i in range(len(y_indices) - 1):
-                self.pheromone[i+1][y_indices[i], y_indices[i+1]] += delta_p
-            self.pheromone[-1][y_indices[-1]] += delta_p
+            self.pheromone[0][x_indices[0]] += delta_p
+            for i in range(len(x_indices) - 1):
+                self.pheromone[i+1][x_indices[i], x_indices[i+1]] += delta_p
+            self.pheromone[-1][x_indices[-1]] += delta_p
+    
+    def plot_result(self,best_path,score_history):
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+        self.env.draw_environment(ax=ax1)
+        smooth_best_path = self.evaluator.generate_chaikin_path(best_path, iterations=3)
+        ax1.plot(smooth_best_path[:, 0], smooth_best_path[:, 1], color='#e65100', linewidth=3, 
+                 label='ACO Smooth Path', zorder=6)
+        ax1.plot(best_path[:, 0], best_path[:, 1], color='gray', linewidth=1, linestyle='--',
+                 marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)
+        ax1.legend(loc='upper left')
+        ax2.plot(score_history, color='#1976d2', linewidth=2)
+        ax2.set_title('ACO Convergence Curve', fontweight='bold', fontsize=14)
+        ax2.set_xlabel('Iteration')
+        ax2.set_ylabel('Fitness Score (Lower is better)')
+        ax2.grid(True, linestyle=':')
+        
+        params_text = (
+            f"Algorithm Parameters:\n"
+            f"  num_ants: {self.num_ants}\n"
+            f"  num_iterations:   {self.num_iterations}\n"
+            f"  num_segments:  {self.num_segments}\n"
+            f"  alpha:        {self.alpha}\n"
+            f"  beta:        {self.beta}\n"
+            f"  rho:        {self.rho}\n"
+            f"  Q:        {self.Q}\n"
+            f"  Best Fitness: {best_score:.2f}"
+        )
+    
+    # 放置在左上角（坐标轴相对坐标，0~1范围）
+        ax2.text(0.5, 0.93, params_text,
+             transform=ax2.transAxes,          # 使用相对坐标
+             fontsize=10,
+             verticalalignment='top',
+             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
+        
+        plt.tight_layout()
+        plt.show()
 
 
 # ================== 执行与可视化验证 ==================
@@ -192,39 +231,27 @@ if __name__ == "__main__":
     env = UAVEnvironment2D()
     evaluator = PathEvaluator()
     
+    
     # 2. 实例化蚁群算法
     # 连续空间分段设为 6-9 段效果最佳，保证能弯曲绕开障碍物去巡检点，同时转弯角度不会太细碎
     planner = ACOPlanner(
         env=env,
         evaluator=evaluator,
         num_ants=50,          # 每次迭代派出的蚂蚁数量
-        num_iterations=80,    # 迭代次数
+        num_iterations=200,    # 迭代次数
         alpha=1.0,            # 信息素权重
         beta=3.0,             # 启发性距离权重（稍微调高有利于加速避障收敛）
-        rho=0.3,              # 挥发率
-        Q=500,                # 信息素增量基数
-        num_segments=8        # 中间划分的路段节点数
+        rho=0.2,              # 挥发率
+        Q=40,                 # 信息素增量基数
+        num_segments=10        # 中间划分的路段节点数
     )
     
     # 3. 运行算法获取最佳路径
-    best_path, best_score = planner.run()
+    best_path, best_score, score_history = planner.run()
     
     print("\n================ 规划结果汇总 ================")
     print(f"最优路径最终得分 (Fitness Score): {best_score:.4f}")
-    print(f"得分明细解释：如果 > 500000 说明漏检了区域；如果 > 1000000 说明发生了硬碰撞撞墙。")
+
+    planner.plot_result(best_path, score_history)
     
-    # 4. 画图展示结果
-    fig, ax = plt.subplots(figsize=(10, 10))
-    env.draw_environment(ax=ax)
     
-    # 绘制规划出的最优路径
-    best_path = np.array(best_path)
-    ax.plot(best_path[:, 0], best_path[:, 1], color='#e65100', linewidth=3, 
-            marker='o', markersize=6, label='ASO Optimized Path', zorder=5)
-    
-    # 将路点序号标出来方便检查转弯
-    for k, pt in enumerate(best_path):
-        ax.text(pt[0]+1, pt[1]+1, f"P{k}", color='black', fontsize=9)
-        
-    ax.legend(loc='upper right')
-    plt.show()
