@@ -1,12 +1,13 @@
 import numpy as np
 import random
-from environment_buildup import UAVEnvironment2D
-from path_evaluator import PathEvaluator
-import matplotlib.pyplot as plt
+from base_planner import BasePlanner
 
-class ACOPlanner:
-    def __init__(self, env, evaluator, num_ants=40, num_iterations=100, 
-                 alpha=1.0, beta=2.0, rho=0.2, Q=100, num_segments=7):
+class ACOPlanner(BasePlanner):
+    def __init__(self, evaluator=None, num_ants=50, max_iter=200, num_waypoints=9,
+                 alpha=1.0, beta=3.0, rho=0.2, Q=40):
+        """ 继承自 BasePlanner 的 ACO 算法 (离散网格) """
+        # ACO 中的分段数即控制点数 + 1
+
         """
         :param env: UAVEnvironment2D 实例
         :param evaluator: PathEvaluator 实例
@@ -18,15 +19,13 @@ class ACOPlanner:
         :param Q: 信息素增强常数
         :param num_segments: 路径的中间分段数（决定了控制点的数量）
         """
-        self.env = env
-        self.evaluator = evaluator
+        super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         self.num_ants = num_ants
-        self.num_iterations = num_iterations
         self.alpha = alpha
         self.beta = beta
         self.rho = rho
         self.Q = Q
-        self.num_segments = num_segments
+        self.num_segments = self.num_waypoints + 1 
         
         # 预先计算 Y 轴的分段界限（从起点到终点）
         self.y_coords = np.linspace(self.env.start_point[1], self.env.end_point[1], self.num_segments + 1)
@@ -49,37 +48,30 @@ class ACOPlanner:
         self.global_best_path = None
         self.global_best_fitness = float('inf')
 
-    def run(self):
+    def optimize(self):
         """算法主循环"""
         print("开始运行蚂蚁系统(ACO)路径规划...")
         score_history = [] #记录收敛曲线
-        for idx in range(self.num_iterations):
-            all_paths = []
-            all_fitness = []
+        for idx in range(self.max_iter):
+            all_paths, all_fitness = [], []
             
             for ant in range(self.num_ants):
                 path = self._construct_path()
-                # 使用你的评估器评定当前路径适应度得分（越低越好）
                 fitness = self.evaluator.evaluate_pso_particle(path)
-                
                 all_paths.append(path)
                 all_fitness.append(fitness)
                 
-                # 记录全局最优
                 if fitness < self.global_best_fitness:
                     self.global_best_fitness = fitness
                     self.global_best_path = path
             
-            score_history.append(self.global_best_fitness)
-            # 更新信息素
+            self.convergence_curve.append(self.global_best_fitness)
             self._update_pheromones(all_paths, all_fitness)
             
-            # 每50代打印一次进度，如果找到了无惩罚的路径会更容易看出来（适应度 < 500）
             if (idx + 1) % 50 == 0 or idx == 0:
-                print(f"迭代次数 [{idx+1}/{self.num_iterations}] -> 当前历史最佳适应度(Fitness): {self.global_best_fitness:.2f}")
+                print(f"  > 迭代 {idx+1:03d}/{self.max_iter} | 全局最优得分: {self.global_best_fitness:.2f}")
                 
-        print("优化完成！")
-        return self.global_best_path, self.global_best_fitness, score_history
+        return self.global_best_path, self.convergence_curve
 
     def _construct_path(self):
         """单只蚂蚁构建一条从起点到终点的路点路径"""
@@ -186,72 +178,9 @@ class ACOPlanner:
             for i in range(len(x_indices) - 1):
                 self.pheromone[i+1][x_indices[i], x_indices[i+1]] += delta_p
             self.pheromone[-1][x_indices[-1]] += delta_p
-    
-    def plot_result(self,best_path,score_history):
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
-        self.env.draw_environment(ax=ax1)
-        smooth_best_path = self.evaluator.generate_chaikin_path(best_path, iterations=3)
-        ax1.plot(smooth_best_path[:, 0], smooth_best_path[:, 1], color='#e65100', linewidth=3, 
-                 label='ACO Smooth Path', zorder=6)
-        ax1.plot(best_path[:, 0], best_path[:, 1], color='gray', linewidth=1, linestyle='--',
-                 marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)
-        ax1.legend(loc='upper left')
-        ax2.plot(score_history, color='#1976d2', linewidth=2)
-        ax2.set_title('ACO Convergence Curve', fontweight='bold', fontsize=14)
-        ax2.set_xlabel('Iteration')
-        ax2.set_ylabel('Fitness Score (Lower is better)')
-        ax2.grid(True, linestyle=':')
-        
-        params_text = (
-            f"Algorithm Parameters:\n"
-            f"  num_ants: {self.num_ants}\n"
-            f"  num_iterations:   {self.num_iterations}\n"
-            f"  num_segments:  {self.num_segments}\n"
-            f"  alpha:        {self.alpha}\n"
-            f"  beta:        {self.beta}\n"
-            f"  rho:        {self.rho}\n"
-            f"  Q:        {self.Q}\n"
-            f"  Best Fitness: {best_score:.2f}"
-        )
-    
-    # 放置在左上角（坐标轴相对坐标，0~1范围）
-        ax2.text(0.5, 0.93, params_text,
-             transform=ax2.transAxes,          # 使用相对坐标
-             fontsize=10,
-             verticalalignment='top',
-             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
-        
-        plt.tight_layout()
-        plt.show()
 
 
-# ================== 执行与可视化验证 ==================
 if __name__ == "__main__":
-    # 1. 实例化环境和评估器
-    env = UAVEnvironment2D()
-    evaluator = PathEvaluator()
-    
-    
-    # 2. 实例化蚁群算法
-    # 连续空间分段设为 6-9 段效果最佳，保证能弯曲绕开障碍物去巡检点，同时转弯角度不会太细碎
-    planner = ACOPlanner(
-        env=env,
-        evaluator=evaluator,
-        num_ants=50,          # 每次迭代派出的蚂蚁数量
-        num_iterations=200,    # 迭代次数
-        alpha=1.0,            # 信息素权重
-        beta=3.0,             # 启发性距离权重（稍微调高有利于加速避障收敛）
-        rho=0.2,              # 挥发率
-        Q=40,                 # 信息素增量基数
-        num_segments=10        # 中间划分的路段节点数
-    )
-    
-    # 3. 运行算法获取最佳路径
-    best_path, best_score, score_history = planner.run()
-    
-    print("\n================ 规划结果汇总 ================")
-    print(f"最优路径最终得分 (Fitness Score): {best_score:.4f}")
-
-    planner.plot_result(best_path, score_history)
-    
-    
+    planner = ACOPlanner()
+    best_path, history = planner.optimize()
+    planner.plot_result(best_path, history, algo_name="ACO")
