@@ -1,38 +1,22 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import math
 import random
-from environment_buildup import UAVEnvironment2D
-from path_evaluator import PathEvaluator
+from base_planner import BasePlanner
 
-class WOAPathPlanner:
-    def __init__(self, num_waypoints=6, pop_size=50, max_iter=150):
-        """
-        初始化 WOA 路径规划器
-        :param num_waypoints: 起点和终点之间的中间控制点数量
-        :param pop_size: 鲸鱼种群规模
-        :param max_iter: 最大迭代次数
-        """
-        self.evaluator = PathEvaluator()
-        self.env = self.evaluator.env  # 统一使用 evaluator 中的环境实例
-        
-        self.num_waypoints = num_waypoints
+class WOAPlanner(BasePlanner):
+    def __init__(self, evaluator=None, pop_size=60, max_iter=200, num_waypoints=10):
+        """ 继承自 BasePlanner 的 WOA 算法 """
+        super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         self.pop_size = pop_size
-        self.max_iter = max_iter
-        
-        # 优化维度为: 中间航点数 * 2 (每个点有 X 和 Y)
-        self.dim = self.num_waypoints * 2 
-        
-        # 定义搜索空间边界
-        self.lb = np.array([self.env.x_bounds[0], self.env.y_bounds[0]] * self.num_waypoints)
-        self.ub = np.array([self.env.x_bounds[1], self.env.y_bounds[1]] * self.num_waypoints)
 
     def _decode_path(self, position):
+        # 重写基类方法
         waypoints = position.reshape((self.num_waypoints, 2))
         # 按照 Y 轴坐标从小到大排序控制点
         waypoints = waypoints[np.argsort(waypoints[:, 1])] 
         path = [self.env.start_point] + waypoints.tolist() + [self.env.end_point]
         return np.array(path)
+
     def _initialize_population(self):
         """
         修复后的启发式种群初始化：精准控制切片数量，杜绝维度不匹配报错
@@ -169,69 +153,15 @@ class WOAPathPlanner:
                     best_score = score
                     best_position = positions[i, :].copy()
 
-            score_history.append(best_score)
+            self.convergence_curve.append(best_score)
             
             # 控制台输出进度 (每 50 次迭代)
             if (t + 1) % 50 == 0:
                 print(f"迭代次数: {t + 1}/{self.max_iter}, 当前最优得分 (适应度): {best_score:.2f}")
 
-        # 解码最终最优路径
-        best_path = self._decode_path(best_position)
-        return best_path, score_history
+        return self._decode_path(best_position), self.convergence_curve
 
-    def plot_result(self, best_path, score_history):
-        """
-        绘制路径规划结果与适应度收敛曲线 (要求格式)
-        """
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
-        
-        # ===== 图 1: 最终路径在环境中的可视化 =====
-        self.env.draw_environment(ax=ax1)
-        
-        # 提取 x, y 坐标用于绘图
-        path_x = [p[0] for p in best_path]
-        path_y = [p[1] for p in best_path]
-        
-        
-        smooth_best_path = self.evaluator.generate_chaikin_path(best_path, iterations=3)
-        ax1.plot(smooth_best_path[:, 0], smooth_best_path[:, 1], color='#e65100', linewidth=3, 
-                 label='WOA Smooth Path', zorder=6)
-        ax1.plot(best_path[:, 0], best_path[:, 1], color='gray', linewidth=1, linestyle='--',
-                 marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)
-        ax1.legend()
-        # ===== 图 2: 适应度收敛曲线 =====
-        ax2.plot(score_history, color='#1e88e5', linewidth=2)
-        ax2.set_title("Fitness Convergence Curve", fontsize=14, fontweight='bold')
-        ax2.set_xlabel("Iteration", fontsize=12)
-        ax2.set_ylabel("Fitness Score", fontsize=12)
-        ax2.grid(True, linestyle='--', alpha=0.7)
-        ax2.set_facecolor('#fafafa')
-        params_text = (
-            f"Algorithm Parameters:\n"
-            f"  num_waypoints: {self.num_waypoints}\n"
-            f"  pop_size:   {self.pop_size}\n"
-            f"  max_iter:  {self.max_iter}\n"
-            f"  Best Fitness: {convergence_history[-1]:.2f}"
-        )
-    
-    # 放置在左上角（坐标轴相对坐标，0~1范围）
-        ax2.text(0.5, 0.93, params_text,
-             transform=ax2.transAxes,          # 使用相对坐标
-             fontsize=10,
-             verticalalignment='top',
-             bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
-        plt.tight_layout()
-        plt.show()
-
-# ================= 运行测试 =================
 if __name__ == "__main__":
-    # 实例化规划器，可适当增加控制点数量以绕开复杂障碍
-    planner = WOAPathPlanner(num_waypoints=10, pop_size=60, max_iter=200)
-    
-    print("开始执行 WOA 鲸鱼算法路径规划...")
-    best_path, convergence_history = planner.optimize()
-    
-    print(f"\n规划完成！最终得分: {convergence_history[-1]:.2f}")
-    print(best_path)
-    # 调用要求的方法进行绘图可视化
-    planner.plot_result(best_path, convergence_history)
+    planner = WOAPlanner()
+    best_path, history = planner.optimize()
+    planner.plot_result(best_path, history, algo_name="WOA")
