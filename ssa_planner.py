@@ -222,7 +222,7 @@ class SSAPlanner:
             filename = f"ssa_run_{run_idx:02d}.png" if run_idx else "ssa_result.png"
             filepath = os.path.join(save_dir, filename)
             plt.savefig(filepath, dpi=300)
-            print(f"✅ 图像已保存至: {filepath}")
+            print(f"图像已保存至: {filepath}")
             plt.close(fig) # 关闭图像，防止内存泄漏和弹窗卡死
         else:
             plt.show()
@@ -235,8 +235,8 @@ if __name__ == "__main__":
     num_runs = 10
     
     print("=" * 50)
-    print(f"🚀 开始 SSA 算法批量测试，共计 {num_runs} 次运行")
-    print(f"📁 结果将保存在当前目录的 '{log_directory}' 文件夹下")
+    print(f"开始 SSA 算法批量测试，共计 {num_runs} 次运行")
+    print(f"结果将保存在当前目录的 '{log_directory}' 文件夹下")
     print("=" * 50)
     
     for current_run in range(1, num_runs + 1):
@@ -251,4 +251,4 @@ if __name__ == "__main__":
         # 可视化展示并保存到文件夹
         planner.plot_result(raw_path, smooth_path, history, run_idx=current_run, save_dir=log_directory)
         
-    print("\n🎉 所有批量运行已完成！请前往 SSA_log 文件夹查看结果。")
+    print("\n所有批量运行已完成！请前往 SSA_log 文件夹查看结果。")
