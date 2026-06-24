@@ -240,7 +240,8 @@ if __name__ == "__main__":
     # 参数建议：因为包含了两个检查区域并且要绕开大量建筑，设置6~8个中间航点较为理想
     print("GWO路径规划...")
     # gwo_planner.py 最底部
-    gwo_planner = GWOPlanner(evaluator, num_wolves=60, max_iter=300, num_waypoints=6)
+    #gwo_planner = GWOPlanner(evaluator, num_wolves=60, max_iter=300, num_waypoints=6)
+    gwo_planner = GWOPlanner(evaluator, num_wolves=120, max_iter=150, num_waypoints=7)
     
     best_path, best_score, convergence_curve = gwo_planner.optimize()
     print(f"规划完成！最终路径得分: {best_score:.2f}")
