@@ -1,58 +1,110 @@
 from path_evaluator import PathEvaluator
-from aco_planner import ACOPlanner
 from coordinator_agent import CoordinatorAgent
 
-def run_meta_optimization():
-    print("=" * 50)
-    print("启动【记忆继承版】多智能体协调决策系统")
-    print("=" * 50)
+# 1. 导入你手上所有的仿生智能体兵器库！
+from aco_planner import ACOPlanner
+from dsaco_planner import DSACOPlanner
+from pso_planner import PSOPlanner
+from gwo_planner import GWOPlanner
+from ssa_planner import SSAPlanner
+from woa_planner import WOAPlanner
 
-    # 1. 初始化独立组件
+def run_parameter_tuning_loop():
+    print("=" * 60)
+    print(" 启动【万能算法专属参数调优】试车场")
+    print("=" * 60)
+
     evaluator = PathEvaluator()
     agent = CoordinatorAgent()
     
-    # 2. 在双层循环外部只实例化一次算法对象！
-    # 这样它的 self.pheromone 矩阵、self.global_best_path 将在整个生命周期内常驻内存，保留记忆
-    planner = ACOPlanner(
+    # ==========================================
+    # 🌟 核心修改：算法字典映射与一键切换
+    # ==========================================
+    ALGO_MAP = {
+        "ACO": ACOPlanner,
+        "DSACO": DSACOPlanner,
+        "PSO": PSOPlanner,
+        "GWO": GWOPlanner,
+        "SSA": SSAPlanner,
+        "WOA": WOAPlanner
+    }
+    
+    # 🎯 你只需修改这里！想测谁，就改成谁的名字
+    TARGET_ALGO = "GWO"  # 比如今天你想测试一下 PSO 的专属调参
+    # ==========================================
+    
+    print(f"  [系统加载] 正在实例化 {TARGET_ALGO} 施工队...")
+    PlannerClass = ALGO_MAP[TARGET_ALGO]
+    
+    # 实例化当前被选中的算法
+    planner = PlannerClass(
         evaluator=evaluator,
-        num_ants=agent.algo_params['pop_size'],  # 初始蚂蚁数
-        max_iter=agent.algo_params['max_iter'],  # 初始迭代数
-        num_waypoints=9
+        num_waypoints=10,
+        max_iter=agent.algo_params['max_iter']
     )
     
-    # 大脑干预的总轮数 (元迭代)
-    meta_rounds = 5 
+    # 动态赋予种群规模（因为不同算法的变量名不一样，我们在这里做个统一的适配）
+    if hasattr(planner, 'num_ants'): planner.num_ants = agent.algo_params['pop_size']
+    elif hasattr(planner, 'num_particles'): planner.num_particles = agent.algo_params['pop_size']
+    elif hasattr(planner, 'num_wolves'): planner.num_wolves = agent.algo_params['pop_size']
+    elif hasattr(planner, 'num_sparrows'): planner.num_sparrows = agent.algo_params['pop_size']
+    elif hasattr(planner, 'pop_size'): planner.pop_size = agent.algo_params['pop_size']
+    
+    meta_rounds = 5  # 调参总轮数
     
     for round_idx in range(1, meta_rounds + 1):
-        print(f"\n>>>>>>>>>>>> 大脑干预循环：第 {round_idx} 轮算法执行 >>>>>>>>>>>>")
-        print(f"  [当前运行配置] 蚂蚁数量: {planner.num_ants} | 迭代步数: {planner.max_iter}")
+        print(f"\n>>>>>>>>>>>>  第 {round_idx} 轮调优测试 [{TARGET_ALGO}] >>>>>>>>>>>>")
         
-        # 3. 运行算法
-        # 第一轮它是白纸；第二轮开始，它将带着上一轮沉淀下来的高浓度信息素和全局最优解继续破局！
+        # 1. 跑当前参数下的算法
         best_path, history = planner.optimize()
         
-        # 4. 对本轮最终找出的“最佳路径”做一次终极体检
+        # 2. 终极体检
         final_score, details = evaluator.evaluate_pso_particle(best_path)
-        print(f"\n[本轮结算表] 最终得分: {final_score:,.2f}")
-        for k, v in details.items():
-            if v > 0:
-                print(f"    - {k}: {v:,.2f}")
-                
-        # 5. 画图看每一轮的路径进化（可选，若嫌弹窗烦可以注释掉）
-        # planner.plot_result(best_path, history, algo_name="ACO_Inherited", run_idx=round_idx)
         
-        # 6. 闭环核心：智能体根据体检报告，开出下一轮的调参处方
-        if round_idx < meta_rounds: 
-            algo_params, eval_params = agent.analyze_and_act(final_score, details)
+        print(f"\n [本轮结算] 得分: {final_score:,.2f}")
+        for k, v in details.items():
+            if v > 0: print(f"    - {k}: {v:,.2f}")
             
-            # 7. 【核心修改】：绝不销毁算法对象，直接将智能体的新指令“注入”到现有的评价器和算法属性中
+        # 3. 提交给老中医，获取更新后的三个字典，以及是否结束的信号
+        if round_idx < meta_rounds:
+            # 接收新增的第四个返回值
+            algo_params, eval_params, specific_params, is_finished = agent.analyze_and_act(final_score, details, TARGET_ALGO)
+            
+            # 接收到提前交卷信号，直接跳出循环
+            if is_finished:
+                print(f"\n {TARGET_ALGO} 调教完毕！在第 {round_idx} 轮提前达成完美收敛。")
+                break
+                
+            # 【A】更新评价器参数
             evaluator.update_params(new_params=eval_params)
             
-            # 动态刷新现有蚂蚁集群的规模和每轮工期，而保留其核心的信息素记忆
-            planner.num_ants = algo_params['pop_size']
+            # 【B】更新算法共性参数 (迭代次数可以随便改，但实体矩阵的种群规模不能中途改)
             planner.max_iter = algo_params['max_iter']
             
-            print(f"  └── 📡 \033[92m【记忆成功继承】\033[0m 上轮信息素已保留。下轮动态调整蚂蚁为 {planner.num_ants} 只，迭代 {planner.max_iter} 步。")
+            if TARGET_ALGO in ["ACO", "DSACO"]:
+                # 只有 ACO/DSACO 这种离散算法，每代会重新撒蚂蚁，才允许中途无缝加兵力
+                planner.num_ants = algo_params['pop_size']
+            else:
+                # 连续型算法 (PSO/GWO/SSA/WOA) 含有固定矩阵，禁止中途加人！
+                # 强制把老中医字典里的 pop_size 改回底层原本的真实人数，防止老中医自己记错账
+                current_pop = getattr(planner, 'num_particles', 
+                              getattr(planner, 'num_wolves', 
+                              getattr(planner, 'num_sparrows', 
+                              getattr(planner, 'pop_size', 50))))
+                
+                algo_params['pop_size'] = current_pop
+            
+            # 【C】动态注入算法“专属参数”！
+            for param_key, param_value in specific_params.items():
+                if hasattr(planner, param_key):
+                    setattr(planner, param_key, param_value)
+                    print(f"  └──  [专属注入] 成功将 {TARGET_ALGO} 的 {param_key} 设为 {param_value}")
+
+    # ==========================================
+    #  所有调参轮次彻底结束后，输出终极图表
+    # ==========================================
+    print(f"\n 全部调优轮次结束！正在生成 {TARGET_ALGO} 的终极路线与连续收敛曲线图...")
+    planner.plot_result(best_path, history, algo_name=f"{TARGET_ALGO}_Final_Tuned")
 
 if __name__ == "__main__":
-    run_meta_optimization()
+    run_parameter_tuning_loop()
