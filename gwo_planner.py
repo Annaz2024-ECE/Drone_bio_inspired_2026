@@ -2,7 +2,7 @@ import numpy as np
 from base_planner import BasePlanner
 
 class GWOPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_wolves=50, max_iter=300, num_waypoints=6):
+    def __init__(self, evaluator=None, num_wolves=120, max_iter=150, num_waypoints=7):
         """ 继承自 BasePlanner，统一输出接口格式为2个返回值 """
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
@@ -75,23 +75,6 @@ class GWOPlanner(BasePlanner):
         return self._decode_path(self.historical_best_pos), self.convergence_curve
 
 if __name__ == "__main__":
-    # 实例化您的环境与评估器
-    evaluator = PathEvaluator()
-    
-    # 启动 GWO 规划
-    # 参数建议：因为包含了两个检查区域并且要绕开大量建筑，设置6~8个中间航点较为理想
-    print("GWO路径规划...")
-    # gwo_planner.py 最底部
-    gwo_planner = GWOPlanner(evaluator, num_wolves=60, max_iter=300, num_waypoints=6)
-    
-    best_path, best_score, convergence_curve = gwo_planner.optimize()
-    print(f"规划完成！最终路径得分: {best_score:.2f}")
-
-    # 画图前，把原点变成丝滑曲线
-    smooth_best_path = evaluator.generate_chaikin_path(best_path, iterations=4)
-
-    # 把丝滑的路线丢进去画图
-    gwo_planner.plot_result(smooth_best_path, convergence_curve)
-    #gwo_planner.plot_result(best_path, convergence_curve)
-        
-    
+    planner = GWOPlanner()
+    best_path, history = planner.optimize()
+    planner.plot_result(best_path, history, algo_name="GWO")
