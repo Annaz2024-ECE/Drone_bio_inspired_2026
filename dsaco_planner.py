@@ -1,24 +1,18 @@
 import numpy as np
 import random
-from environment_buildup import UAVEnvironment2D
-from path_evaluator import PathEvaluator
-import matplotlib.pyplot as plt
+from base_planner import BasePlanner
 
-class DSACOPlanner:
-    def __init__(self, env, evaluator, num_ants=40, num_iterations=100, 
-                 alpha=1.0, beta=2.0, rho=0.2, Q=100, num_segments=7):
-        """
-        引入 DSACO (双策略蚁群算法) 思想优化的路径规划器
-        """
-        self.env = env
-        self.evaluator = evaluator
+class DSACOPlanner(BasePlanner):
+    def __init__(self, evaluator=None, num_ants=50, max_iter=200, num_waypoints=9,
+                 alpha=1.0, beta=4.0, rho=0.2, Q=50):
+        """ 继承自 BasePlanner 的 DSACO 算法 """
+        super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         self.num_ants = num_ants
-        self.num_iterations = num_iterations
         self.alpha = alpha
         self.beta = beta
         self.rho = rho
         self.Q = Q
-        self.num_segments = num_segments
+        self.num_segments = self.num_waypoints + 1
         
         # ==== DSACO 论文新增核心参数 ====
         self.q0_min = 0.1         # 确定性选择概率的初始最小值
@@ -45,7 +39,7 @@ class DSACOPlanner:
         self.global_best_path = None
         self.global_best_fitness = float('inf')
 
-    def run(self):
+    def optimize(self):
         """算法主循环"""
         print("开始运行 DSACO (双策略蚁群优化) 路径规划...")
         score_history = [] 
@@ -66,7 +60,7 @@ class DSACOPlanner:
                     self.global_best_fitness = fitness
                     self.global_best_path = path
             
-            score_history.append(self.global_best_fitness)
+            self.convergence_curve.append(self.global_best_fitness)
             
             # 传入当前代数 idx，用于动态更新精英信息素
             self._update_pheromones(all_paths, all_fitness, idx)
@@ -75,7 +69,7 @@ class DSACOPlanner:
                 print(f"迭代次数 [{idx+1}/{self.num_iterations}] -> 当前历史最佳适应度(Fitness): {self.global_best_fitness:.2f}")
                 
         print("优化完成！")
-        return self.global_best_path, self.global_best_fitness, score_history
+        return self.global_best_path, self.convergence_curve
 
     def _construct_path(self, current_iteration):
         """单只蚂蚁构建路点路径 (融合 DSACO 双策略)"""
@@ -190,65 +184,7 @@ class DSACOPlanner:
         for i in range(len(self.pheromone)):
             self.pheromone[i] = np.clip(self.pheromone[i], self.tau_min, self.tau_max)
     
-    def plot_result(self, best_path, best_score, score_history):
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
-        self.env.draw_environment(ax=ax1)
-        smooth_best_path = self.evaluator.generate_chaikin_path(best_path, iterations=3)
-        ax1.plot(smooth_best_path[:, 0], smooth_best_path[:, 1], color='#e65100', linewidth=3, 
-                 label='DSACO Smooth Path', zorder=6)
-        ax1.plot(best_path[:, 0], best_path[:, 1], color='gray', linewidth=1, linestyle='--',
-                 marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)
-        ax1.legend(loc='upper left')
-        
-        ax2.plot(score_history, color='#2e7d32', linewidth=2)
-        ax2.set_title('DSACO Convergence Curve', fontweight='bold', fontsize=14)
-        ax2.set_xlabel('Iteration')
-        ax2.set_ylabel('Fitness Score (Lower is better)')
-        ax2.grid(True, linestyle=':')
-        
-        params_text = (
-            f"Parameters:\n"
-            f"  num_ants: {self.num_ants}\n"
-            f"  num_iterations: {self.num_iterations}\n"
-            f"  num_segments: {self.num_segments}\n"
-            f"  alpha: {self.alpha}\n"
-            f"  beta: {self.beta}\n"
-            f"  rho: {self.rho}\n"
-            f"  Q: {self.Q}\n"
-            f"  q0 range: [{self.q0_min}, {self.q0_max}]\n"
-            f"  Best Fitness: {best_score:.2f}"
-        )
-    
-        ax2.text(0.5, 0.93, params_text,
-                 transform=ax2.transAxes,
-                 fontsize=10,
-                 verticalalignment='top',
-                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='gray'))
-        
-        plt.tight_layout()
-        plt.show()
-
-# ================== 执行与可视化验证 ==================
 if __name__ == "__main__":
-    env = UAVEnvironment2D()
-    evaluator = PathEvaluator()
-    
-    planner = DSACOPlanner(
-        env=env,
-        evaluator=evaluator,
-        num_ants=50,          # 略微增加蚂蚁数量
-        num_iterations=200,   # 迭代次数
-        alpha=1.0,            
-        beta=4.0,             # 较高的 beta 让巡检区引力更大
-        rho=0.2,              
-        Q=50,                
-        num_segments=10        # 南北路段分段数
-    )
-    
-    best_path, best_score, score_history = planner.run()
-    
-    print("\n================ 规划结果汇总 ================")
-    print(f"最优路径最终得分 (Fitness Score): {best_score:.4f}")
-    
-    # 传入 best_score 修复变量域问题
-    planner.plot_result(best_path, best_score, score_history)
+    planner = DSACOPlanner()
+    best_path, history = planner.optimize()
+    planner.plot_result(best_path, history, algo_name="DSACO")
