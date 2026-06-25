@@ -104,7 +104,7 @@ class SSAPlanner(BasePlanner):
             # (4) 越界处理与适应度重新评估
             for i in range(self.num_sparrows):
                 new_sparrows[i] = np.clip(new_sparrows[i], self.lb, self.ub)
-                score = self.evaluator.evaluate_pso_particle(self._decode_path(new_sparrows[i]))
+                score, _ = self.evaluator.evaluate_pso_particle(self._decode_path(new_sparrows[i]))
                 
                 self.sparrows[i] = new_sparrows[i]
                 self.fitness[i] = score

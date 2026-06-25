@@ -76,7 +76,7 @@ class PSOPlanner(BasePlanner):
                 self.particles[i] = np.clip(self.particles[i], self.lb, self.ub)
                 
                 full_path = self._decode_path(self.particles[i])
-                score = self.evaluator.evaluate_pso_particle(full_path)
+                score, _ = self.evaluator.evaluate_pso_particle(full_path)
                 
                 if score < self.pbest_scores[i]:
                     self.pbest_scores[i] = score
