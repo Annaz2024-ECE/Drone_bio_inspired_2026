@@ -44,14 +44,14 @@ class DSACOPlanner(BasePlanner):
         print("开始运行 DSACO (双策略蚁群优化) 路径规划...")
         score_history = [] 
         
-        for idx in range(self.num_iterations):
+        for idx in range(self.max_iter):
             all_paths = []
             all_fitness = []
             
             for ant in range(self.num_ants):
                 # 传入当前代数 idx，用于计算动态双策略参数 q0
                 path = self._construct_path(idx)
-                fitness = self.evaluator.evaluate_pso_particle(path)
+                fitness, _ = self.evaluator.evaluate_pso_particle(path)
                 
                 all_paths.append(path)
                 all_fitness.append(fitness)
@@ -66,7 +66,7 @@ class DSACOPlanner(BasePlanner):
             self._update_pheromones(all_paths, all_fitness, idx)
             
             if (idx + 1) % 50 == 0 or idx == 0:
-                print(f"迭代次数 [{idx+1}/{self.num_iterations}] -> 当前历史最佳适应度(Fitness): {self.global_best_fitness:.2f}")
+                print(f"迭代次数 [{idx+1}/{self.max_iter}] -> 当前历史最佳适应度(Fitness): {self.global_best_fitness:.2f}")
                 
         print("优化完成！")
         return self.global_best_path, self.convergence_curve
@@ -77,7 +77,7 @@ class DSACOPlanner(BasePlanner):
         
         # 【DSACO 策略 1】：动态调整确定性选择概率 q0
         # 随着迭代进行，q0 线性增加。前期重探索(Roulette)，后期重开发(Argmax)
-        q0 = self.q0_min + (self.q0_max - self.q0_min) * (current_iteration / self.num_iterations)
+        q0 = self.q0_min + (self.q0_max - self.q0_min) * (current_iteration / self.max_iter)
         
         # 1. 决定从起点到第1个控制点
         prob = np.copy(self.pheromone[0])
