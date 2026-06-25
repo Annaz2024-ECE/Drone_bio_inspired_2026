@@ -2,7 +2,7 @@ import numpy as np
 from base_planner import BasePlanner
 
 class GWOPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_wolves=120, max_iter=150, num_waypoints=7):
+    def __init__(self, evaluator=None, num_wolves=120, max_iter=150, num_waypoints=6):
         """ 继承自 BasePlanner，统一输出接口格式为2个返回值 """
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
@@ -27,7 +27,7 @@ class GWOPlanner(BasePlanner):
         for l in range(self.max_iter):
             for i in range(self.num_wolves):
                 self.positions[i] = np.clip(self.positions[i], self.lb, self.ub)
-                fitness = self.evaluator.evaluate_pso_particle(self._decode_path(self.positions[i]))
+                fitness, _ = self.evaluator.evaluate_pso_particle(self._decode_path(self.positions[i]))
                 
                 if fitness < self.alpha_score:
                     self.delta_score, self.delta_pos = self.beta_score, self.beta_pos.copy()

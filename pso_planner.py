@@ -53,7 +53,7 @@ class PSOPlanner(BasePlanner):
         # 初始评估
         for i in range(self.num_particles):
             full_path = self._decode_path(self.particles[i])
-            score = self.evaluator.evaluate_pso_particle(full_path)
+            score, _ = self.evaluator.evaluate_pso_particle(full_path)
             self.pbest_scores[i] = score
             if score < self.gbest_score:
                 self.gbest_score = score
