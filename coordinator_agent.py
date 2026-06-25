@@ -18,58 +18,79 @@ class CoordinatorAgent:
         # 记录调整历史
         self.meta_iteration = 0
 
-    def analyze_and_act(self, total_score, details):
+        self.stuck_counter = 0            # 记录连续失败的次数
+        self.last_score = float('inf')    # 记录上一轮的分数
+
+    def analyze_and_act(self, total_score, details, current_algo):
         """
-        核心决策大脑：读取体检报告，输出下一轮的调参指令
+        核心决策大脑：读取体检报告，输出下一轮的调参指令，甚至更换算法
         :param total_score: 最终总分
         :param details: 惩罚项明细字典
-        :return: (更新后的算法参数, 更新后的评价器参数, 智能体执行的动作日志)
+        :param current_algo: 当前正在运行的算法名字 (如 "ACO")
+        :return: (算法参数, 评价器参数, 下一轮要用的算法, 动作日志)
         """
         self.meta_iteration += 1
         actions_taken = []
+        next_algo = current_algo  # 默认不换算法，继续用当前的
         
-        print(f"\n[决策大脑] 第 {self.meta_iteration} 轮分析中...")
+        print(f"\n[决策大脑] 第 {self.meta_iteration} 轮分析中... (当前算法: {current_algo})")
 
         # ==========================================
-        # 诊断 1：极其恶劣的失败 (撞墙 或 严重漏打卡)
-        # 病因：算法完全陷入死胡同，或者搜索范围太小
-        # 处方：暴增种群规模，加大全局探索力度
+        # 核心新增：卡壳诊断与动态换人
         # ==========================================
+        # 1. 计算本轮进步幅度
+        improvement = self.last_score - total_score
+        self.last_score = total_score
+
+        # 2. 诊断是否陷入死局：如果还在撞墙或漏打卡，且分数下降不到 1000 分
+        is_failing = details.get('fatal_collision', 0) > 0 or details.get('missed_target', 0) > 0
+        if is_failing and improvement < 1000:
+            self.stuck_counter += 1
+            print(f"  [警告] 当前算法 {current_algo} 陷入瓶颈！累计卡壳: {self.stuck_counter} 次")
+        else:
+            self.stuck_counter = 0 # 只要有明显进步，或者已经跑通了，耐心值就清零
+
+        # 3. 耐心值耗尽：触发终极绝招动态换人！
+        if self.stuck_counter >= 2:
+            print("  🚨 触发【动态算法切换】机制！")
+            if current_algo == "ACO":
+                next_algo = "GWO"
+                actions_taken.append(f"SWITCH_ALGO (ACO卡壳，切换为 {next_algo})")
+            elif current_algo == "GWO":
+                next_algo = "PSO"
+                actions_taken.append(f"SWITCH_ALGO (GWO卡壳，切换为 {next_algo})")
+            elif current_algo == "PSO":
+                next_algo = "ACO"
+                actions_taken.append(f"SWITCH_ALGO (PSO卡壳，切换回 {next_algo})")
+            
+            self.stuck_counter = 0  # 换人后，耐心值重新计算
+
+        # ==========================================
+        # 以下保留你原有的参数微调逻辑
+        # ==========================================
+        # 诊断 1：极其恶劣的失败 (撞墙 或 严重漏打卡)
         if details.get('fatal_collision', 0) > 0 or details.get('missed_target', 0) > 100000:
-            # 种群规模增加 20，但设一个上限防止内存撑爆
             if self.algo_params['pop_size'] < 150:
                 self.algo_params['pop_size'] += 20
                 actions_taken.append("INCREASE_POP_SIZE (增加种群以逃离局部最优)")
-            
-            # 如果撞墙严重，增加迭代次数让它慢慢试
             if details.get('fatal_collision', 0) > 0 and self.algo_params['max_iter'] < 500:
                 self.algo_params['max_iter'] += 50
                 actions_taken.append("INCREASE_MAX_ITER (增加迭代时间用于避障)")
 
-        # ==========================================
         # 诊断 2：路线安全，但像无头苍蝇一直急转弯
-        # 病因：环境走廊狭窄，或者航点靠得太近
-        # 处方：增加 Chaikin 物理平滑次数，适当推开航点距离
-        # ==========================================
         if details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000:
             if self.eval_params['chaikin_iterations'] < 6:
                 self.eval_params['chaikin_iterations'] += 1
                 actions_taken.append("ENHANCE_SMOOTHNESS (增加Chaikin割角次数)")
-                
         if details.get('spacing_penalty', 0) > 1000:
             if self.eval_params['min_waypoint_dist'] < 10.0:
                 self.eval_params['min_waypoint_dist'] += 1.0
                 actions_taken.append("INCREASE_SPACING (增加航点排斥力)")
 
-        # ==========================================
         # 诊断 3：完美收敛 (无致命伤，分数极低)
-        # 病因：算法已经找到很好的解了
-        # 处方：尝试“裁员”或者“减少迭代时间”，压榨计算效率
-        # ==========================================
         is_perfect = details.get('fatal_collision', 0) == 0 and \
                      details.get('missed_target', 0) == 0 and \
                      details.get('sharp_turn', 0) == 0
-                     
         if is_perfect and total_score < 5000:
             if self.algo_params['pop_size'] > 30:
                 self.algo_params['pop_size'] -= 10
@@ -86,4 +107,5 @@ class CoordinatorAgent:
         for action in actions_taken:
             print(f"  └── 动作指令: \033[93m{action}\033[0m")
 
-        return self.algo_params, self.eval_params
+        # 注意这里返回了 next_algo
+        return self.algo_params, self.eval_params, next_algo
