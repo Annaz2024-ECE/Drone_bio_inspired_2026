@@ -79,29 +79,47 @@ class BasePlanner:
         ax2.grid(True, linestyle=':', alpha=0.6)
         
         # ==========================================
-        # 智能参数提取模块
+        # 智能参数提取模块 (左上角)
         # ==========================================
-        # 动态提取当前算法的超参数 (过滤掉内部矩阵、坐标和无关变量)
         params_list = []
         for k, v in self.__dict__.items():
             if isinstance(v, (int, float)) and not k.startswith('_') \
                and 'score' not in k and 'pos' not in k and 'bound' not in k \
                and k not in ['lb', 'ub', 'dim']:
-                # 稍微格式化一下浮点数
                 val_str = f"{v:.2f}" if isinstance(v, float) else str(v)
                 params_list.append(f"  {k}: {val_str}")
         
         params_text = f"Parameters:\n" + "\n".join(params_list)
-        
-        # 在左上角添加参数信息框
-        ax2.text(0.05, 0.95, params_text,
-                 transform=ax2.transAxes,
-                 fontsize=10,
-                 verticalalignment='top',
-                 horizontalalignment='left',
+        ax2.text(0.20, 0.95, params_text,
+                 transform=ax2.transAxes, fontsize=10,
+                 verticalalignment='top', horizontalalignment='left',
                  bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
         
-        # 在右上角显示最终得分框 (醒目红色)
+        # ==========================================
+        # 【新增】得分明细提取模块 (左下角)
+        # ==========================================
+        # 拿算法跑出来的最终路径，去评价器里再测一次，拿到体检报告 (details)
+        _, details = self.evaluator.evaluate_pso_particle(best_path)
+        
+        details_list = []
+        for k, v in details.items():
+            if v > 0:  # 只显示有扣分的项目，界面更清爽
+                details_list.append(f"  {k}: {v:,.0f}")
+                
+        if not details_list:
+            details_list.append("  Perfect! No penalties.")
+            
+        details_text = "Fitness Breakdown:\n" + "\n".join(details_list)
+        
+        # 绘制在收敛曲线的右上方 (Best Score 红色框的下方)，避免挡住底部的收敛曲线
+        ax2.text(0.95, 0.88, details_text,
+                 transform=ax2.transAxes, fontsize=10,
+                 verticalalignment='top', horizontalalignment='right',
+                 bbox=dict(boxstyle='round', facecolor='#eef7ff', alpha=0.9, edgecolor='#1976d2'))
+        
+        # ==========================================
+        # 最终得分框 (右上角)
+        # ==========================================
         final_score = score_history[-1] if len(score_history) > 0 else 0
         ax2.text(0.95, 0.95, f'Best Score: {final_score:,.2f}', 
                  transform=ax2.transAxes, fontsize=12, fontweight='bold', 
