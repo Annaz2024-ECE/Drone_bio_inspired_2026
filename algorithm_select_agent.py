@@ -10,7 +10,7 @@ from woa_planner import WOAPlanner
 
 from path_evaluator import PathEvaluator
 
-class OptimizationAgent:
+class Algorithm_Select_Agent:
     def __init__(self, evaluator, task_priority='speed'):
         """
         仿生优化智能体 (Algorithm Selector Agent)
@@ -136,7 +136,7 @@ if __name__ == "__main__":
     current_task = 'safety'
     
     # 3. 实例化仿生优化智能体，传入评价器和当前情景
-    agent = OptimizationAgent(evaluator=shared_evaluator, task_priority=current_task)
+    agent = Algorithm_Select_Agent(evaluator=shared_evaluator, task_priority=current_task)
     
     # 4. 智能体提取环境信息，并分配配置好的算法实例
     active_planner = agent.make_decision()
