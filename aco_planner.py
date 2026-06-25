@@ -57,7 +57,7 @@ class ACOPlanner(BasePlanner):
             
             for ant in range(self.num_ants):
                 path = self._construct_path()
-                fitness = self.evaluator.evaluate_pso_particle(path)
+                fitness, _ = self.evaluator.evaluate_pso_particle(path)
                 all_paths.append(path)
                 all_fitness.append(fitness)
                 
