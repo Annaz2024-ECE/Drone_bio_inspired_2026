@@ -1,0 +1,229 @@
+import numpy as np
+import random
+from environment_buildup import UAVEnvironment2D
+from path_evaluator import PathEvaluator
+import matplotlib.pyplot as plt
+
+class ACOPlanner:
+    def __init__(self, env, evaluator, num_ants=40, num_iterations=100, 
+                 alpha=1.0, beta=2.0, rho=0.2, Q=100, num_segments=8):
+        """
+        基于方案2（航向角步进）的改进蚁群算法
+        :param num_segments: 在方案2中代表无人机到达终点前【总共迈出的步数】
+        """
+        self.env = env
+        self.evaluator = evaluator
+        self.num_ants = num_ants
+        self.num_iterations = num_iterations
+        self.alpha = alpha
+        self.beta = beta
+        self.rho = rho
+        self.Q = Q
+        
+        # ==== 方案2 核心参数配置 ====
+        self.num_steps = num_segments      # 无人机自主选择角度推进的步数
+        self.step_length = 12.0            # 每一步前进的固定距离（根据 0~100 地图，12左右较合适）
+        self.num_angles = 36               # 将360度圆周离散化为36个候选方向（每10度一个方向）
+        self.candidate_angles = np.linspace(-np.pi, np.pi, self.num_angles, endpoint=False)
+        
+        # 初始化信息素矩阵：形状为 (总步数, 当前步角度候选, 下一步角度候选)
+        self.pheromone = []
+        # 第1步：从起点出发选择的方向信息素
+        self.pheromone.append(np.ones(self.num_angles))
+        # 中间各步：方向与方向之间的转移信息素
+        for i in range(self.num_steps - 1):
+            self.pheromone.append(np.ones((self.num_angles, self.num_angles)))
+        
+        self.global_best_path = None
+        self.global_best_fitness = float('inf')
+
+    def run(self):
+        """算法主循环"""
+        print("开始运行【航向角步进】蚂蚁系统(ACO)路径规划...")
+        score_history = []
+        
+        for idx in range(self.num_iterations):
+            all_paths = []
+            all_fitness = []
+            
+            for ant in range(self.num_ants):
+                path = self._construct_path()
+                fitness = self.evaluator.calculate_fitness(path)
+                
+                all_paths.append(path)
+                all_fitness.append(fitness)
+                
+                if fitness < self.global_best_fitness:
+                    self.global_best_fitness = fitness
+                    self.global_best_path = path
+            
+            score_history.append(self.global_best_fitness)
+            self._update_pheromones(all_paths, all_fitness)
+            
+            if (idx + 1) % 10 == 0 or idx == 0:
+                print(f"迭代 [{idx+1}/{self.num_iterations}] -> 最佳适应度(Fitness): {self.global_best_fitness:.2f}")
+                
+        print("优化完成！")
+        return self.global_best_path, self.global_best_fitness, score_history
+
+    def _construct_path(self):
+        """单只蚂蚁利用航向角动力学构建路径"""
+        path_angles_idx = [] 
+        current_pos = np.copy(self.env.start_point)
+        actual_path = [current_pos]
+        
+        # 1. 决定从起点出发的第一步角度
+        prob = np.copy(self.pheromone[0])
+        for j in range(self.num_angles):
+            angle = self.candidate_angles[j]
+            p_next = current_pos + self.step_length * np.array([np.cos(angle), np.sin(angle)])
+            
+            if (p_next[0] < self.env.x_bounds[0] or p_next[0] > self.env.x_bounds[1] or
+                p_next[1] < self.env.y_bounds[0] or p_next[1] > self.env.y_bounds[1] or
+                self.env.is_point_in_obstacle(p_next)):
+                prob[j] *= 0.01
+            
+            dist_to_end = self.env.calculate_distance(p_next, self.env.end_point)
+            dist_to_targets = [self.env.calculate_distance(p_next, t['center']) for t in self.env.target_areas]
+            min_target_dist = min(dist_to_targets)
+            
+            heuristic = 1.0 / (dist_to_end + 0.3 * min_target_dist + 1e-4)
+            prob[j] = (prob[j] ** self.alpha) * (heuristic ** self.beta)
+            
+        # 【修复点 1】安全的归一化逻辑，去除 +1e-12
+        total_prob = np.sum(prob)
+        if total_prob > 0:
+            prob = prob / total_prob
+        else:
+            prob = np.ones_like(prob) / len(prob)
+        
+        # 【消除浮点误差】强行让 NumPy 纠正微小的截断误差
+        prob = prob / np.sum(prob)
+        
+        first_idx = np.random.choice(self.num_angles, p=prob)
+        path_angles_idx.append(first_idx)
+        
+        current_pos = current_pos + self.step_length * np.array([np.cos(self.candidate_angles[first_idx]), np.sin(self.candidate_angles[first_idx])])
+        actual_path.append(current_pos)
+        
+        # 2. 决定中间后续每一步的角度选择
+        for i in range(1, self.num_steps):
+            prev_angle_idx = path_angles_idx[-1]
+            prob = np.copy(self.pheromone[i][prev_angle_idx])
+            prev_angle = self.candidate_angles[prev_angle_idx]
+            
+            for j in range(self.num_angles):
+                angle = self.candidate_angles[j]
+                p_next = current_pos + self.step_length * np.array([np.cos(angle), np.sin(angle)])
+                
+                if (p_next[0] < self.env.x_bounds[0] or p_next[0] > self.env.x_bounds[1] or
+                    p_next[1] < self.env.y_bounds[0] or p_next[1] > self.env.y_bounds[1] or
+                    self.env.is_segment_collision(current_pos, p_next, safe_margin=0.0)):
+                    prob[j] *= 0.001
+                
+                angle_diff = np.abs(angle - prev_angle)
+                if angle_diff > np.pi: 
+                    angle_diff = 2 * np.pi - angle_diff
+                if angle_diff > np.pi / 2: 
+                    prob[j] *= 0.1  
+                
+                dist_to_end = self.env.calculate_distance(p_next, self.env.end_point)
+                dist_to_targets = [self.env.calculate_distance(p_next, t['center']) for t in self.env.target_areas]
+                min_target_dist = min(dist_to_targets)
+                
+                heuristic = 1.0 / (dist_to_end + 0.3 * min_target_dist + 1e-4)
+                prob[j] = (prob[j] ** self.alpha) * (heuristic ** self.beta)
+                
+            # 【修复点 2】同理修复中间步骤的归一化与浮点对齐
+            total_prob = np.sum(prob)
+            if total_prob > 0:
+                prob = prob / total_prob
+            else:
+                prob = np.ones_like(prob) / len(prob)
+                
+            prob = prob / np.sum(prob) # 彻底消除 0.9999999 这种微弱偏差
+            
+            next_idx = np.random.choice(self.num_angles, p=prob)    
+            path_angles_idx.append(next_idx)
+            
+            current_pos = current_pos + self.step_length * np.array([np.cos(self.candidate_angles[next_idx]), np.sin(self.candidate_angles[next_idx])])
+            actual_path.append(current_pos)
+            
+        # 3. 闭环
+        actual_path.append(self.env.end_point)
+        return np.array(actual_path)
+
+    def _update_pheromones(self, all_paths, all_fitness):
+        """更新信息素"""
+        # 1. 信息素全面蒸发
+        for i in range(len(self.pheromone)):
+            self.pheromone[i] *= (1.0 - self.rho)
+            self.pheromone[i] = np.clip(self.pheromone[i], 0.1, 10.0)
+        
+        # 2. 根据路径质量反向叠加释放新信息素
+        for path, fitness in zip(all_paths, all_fitness):
+            delta_p = self.Q / (fitness + 1e-4)
+            
+            # 从生成好的路点坐标反推每一步蚂蚁所选择的弧度方向
+            angle_indices = []
+            for i in range(self.num_steps):
+                p_curr = path[i]
+                p_next = path[i+1]
+                delta = p_next - p_curr
+                actual_angle = np.arctan2(delta[1], delta[0]) # 算出该步真实飞行的弧度
+                
+                # 考虑圆周边界，反推最接近的离散角度索引
+                angle_diffs = np.abs(self.candidate_angles - actual_angle)
+                angle_diffs = np.where(angle_diffs > np.pi, 2 * np.pi - angle_diffs, angle_diffs)
+                idx = np.argmin(angle_diffs)
+                angle_indices.append(idx)
+                
+            # 将奖励叠加到对应的转移网络中
+            self.pheromone[0][angle_indices[0]] += delta_p
+            for i in range(self.num_steps - 1):
+                self.pheromone[i+1][angle_indices[i], angle_indices[i+1]] += delta_p
+
+    def plot_result(self, best_path, score_history):
+        """ 绘制结果：左图为地图路径，右图为收敛曲线 """
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+        
+        # 1. 绘制左图：地图和全自由度航迹
+        self.env.draw_environment(ax=ax1)
+        ax1.plot(best_path[:, 0], best_path[:, 1], color='#e65100', linewidth=3, 
+                 marker='o', label='ACO (Heading Angle) Path', zorder=5)
+        ax1.legend(loc='upper right')
+        
+        # 2. 绘制右图：算法收敛曲线
+        ax2.plot(score_history, color='#1976d2', linewidth=2)
+        ax2.set_title('ACO Convergence Curve', fontweight='bold', fontsize=14)
+        ax2.set_xlabel('Iteration')
+        ax2.set_ylabel('Fitness Score (Lower is better)')
+        ax2.grid(True, linestyle=':')
+        
+        plt.tight_layout()
+        plt.show()
+
+
+# ================== 执行与双图联合验证 ==================
+if __name__ == "__main__":
+    env = UAVEnvironment2D()
+    evaluator = PathEvaluator()
+    
+    planner = ACOPlanner(
+        env=env,
+        evaluator=evaluator,
+        num_ants=60,          # 航向角搜索维度变高，稍微增加每代蚂蚁数提供更丰富的样本
+        num_iterations=250,   # 迭代次数
+        alpha=1.0,            # 信息素权重
+        beta=3.5,             # 调高启发引力权重，强力引导蚂蚁大范围摆动去打卡
+        rho=0.25,             # 挥发率
+        Q=600,                # 信息素增量基数
+        num_segments=10       # 允许中间自由变换 10 次方向
+    )
+    
+    best_path, best_score, score_history = planner.run()
+    
+    print("\n================ 规划结果汇总 ================")
+    
+    # 成果展示
+    planner.plot_result(best_path, score_history)
