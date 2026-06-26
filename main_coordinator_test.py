@@ -36,19 +36,25 @@ def run_parameter_tuning_loop():
     print(f"  [系统加载] 正在实例化 {TARGET_ALGO} 施工队...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
     
-    # 实例化当前被选中的算法
-    planner = PlannerClass(
-        evaluator=evaluator,
-        num_waypoints=10,
-        max_iter=agent.algo_params['max_iter']
-    )
+    # ==========================================
+    # 在实例化前，就打包好正确的参数字典 (kwargs)
+    # ==========================================
+    kwargs = {
+        'evaluator': evaluator,
+        'num_waypoints': 10,
+        'max_iter': agent.algo_params['max_iter']
+    }
     
-    # 动态赋予种群规模（因为不同算法的变量名不一样，我们在这里做个统一的适配）
-    if hasattr(planner, 'num_ants'): planner.num_ants = agent.algo_params['pop_size']
-    elif hasattr(planner, 'num_particles'): planner.num_particles = agent.algo_params['pop_size']
-    elif hasattr(planner, 'num_wolves'): planner.num_wolves = agent.algo_params['pop_size']
-    elif hasattr(planner, 'num_sparrows'): planner.num_sparrows = agent.algo_params['pop_size']
-    elif hasattr(planner, 'pop_size'): planner.pop_size = agent.algo_params['pop_size']
+    # 精准对接各个算法底层所需的变量名
+    pop_size = agent.algo_params['pop_size']
+    if TARGET_ALGO in ["ACO", "DSACO"]: kwargs['num_ants'] = pop_size
+    elif TARGET_ALGO == "PSO": kwargs['num_particles'] = pop_size
+    elif TARGET_ALGO == "GWO": kwargs['num_wolves'] = pop_size
+    elif TARGET_ALGO == "SSA": kwargs['num_sparrows'] = pop_size
+    elif TARGET_ALGO == "WOA": kwargs['pop_size'] = pop_size
+
+    # 带着正确的种群规模出生，底层矩阵直接完美生成 50x20！
+    planner = PlannerClass(**kwargs)
     
     meta_rounds = 5  # 调参总轮数
     

@@ -38,7 +38,7 @@ class CoordinatorAgent:
                              details.get('sharp_turn', 0) == 0)
         
         if is_perfectly_safe and (self.meta_iteration > 1) and (improvement_rate < 0.01):
-            print(f"  🌟 [全局通知] 路线已绝对安全，且收敛至极限(进步率 < 1%)，申请提前交卷！")
+            print(f"   [全局通知] 路线已绝对安全，且收敛至极限(进步率 < 1%)，申请提前交卷！")
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished
 
