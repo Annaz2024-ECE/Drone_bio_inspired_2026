@@ -42,6 +42,25 @@ class CoordinatorAgent:
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished
 
+        ideal_dist = details.get('ideal_distance', 100.0)
+        max_allowed_dist = ideal_dist * 1.15  
+        
+        # 绕路诊断
+        if is_perfectly_safe and details.get('distance', 0) > max_allowed_dist:
+            print(f"  [警告] 路线已安全，但总航程 {details.get('distance'):.1f}m 超过了动态底线 {max_allowed_dist:.1f}m，存在绕路！")
+            
+            if current_algo == "PSO":
+                specific_params['c2'] = 1.0 
+                actions_taken.append("TUNE_PSO: 降低社会认知 c2, 减少绕路甩尾，强行拉直航线")
+                
+            elif current_algo in ["ACO", "DSACO"]:
+                specific_params['beta'] = 6.0 
+                actions_taken.append(f"TUNE_{current_algo}: 极度强化目标牵引 beta=6.0, 强行拉直路线")
+                
+            elif current_algo == "SSA":
+                specific_params['ST'] = 0.9 
+                actions_taken.append("TUNE_SSA: 提高安全阈值 ST=0.9, 让麻雀安心走直线少乱跳")
+
         # 判定卡壳状态
         is_failing = details.get('fatal_collision', 0) > 0 or details.get('missed_target', 0) > 0
         if is_failing and improvement < 1000:
