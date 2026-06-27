@@ -278,9 +278,11 @@ class PathEvaluator:
 
         # 3. 调用引力梯度目标惩罚
         details['missed_target'] += self.calculate_target_penalty(path_points)
+
+        details['obstacle_count'] = len(self.env.obstacles) # 把环境里的障碍物总数也一并塞进去
                 
-        # 最终得分
-        total_score = sum(details.values())
+        # 最终得分（不算理想得分）
+        total_score = sum(v for k, v in details.items() if k not in ['ideal_distance', 'obstacle_count'])
         return total_score, details
 
     def evaluate_pso_particle(self, raw_waypoints):
@@ -301,7 +303,7 @@ class PathEvaluator:
         details['spacing_penalty'] = spacing_penalty
         
         # 重新核算最终总分 (因为加入了 spacing_penalty)
-        total_score = sum(details.values())
+        total_score = sum(v for k, v in details.items() if k not in ['ideal_distance', 'obstacle_count'])
         
         return total_score, details
 

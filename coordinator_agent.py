@@ -27,7 +27,7 @@ class CoordinatorAgent:
         # ==========================================
         improvement = self.last_score - total_score
         if self.last_score == float('inf'):
-            improvement_rate = 1.0  # 第一轮算作 100% 进步
+            improvement_rate = 1.0  # 第一轮算作 100% 进步，至少跑完一轮
         else:
             improvement_rate = max(0, improvement) / (self.last_score + 1e-8) 
             
@@ -42,12 +42,16 @@ class CoordinatorAgent:
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished
 
+        # 障碍物越多，容忍的绕路倍数就越大！
+        # 比如：0个障碍物 -> 1.0倍； 30个障碍物 -> 1.15倍； 100个障碍物 -> 1.5倍
         ideal_dist = details.get('ideal_distance', 100.0)
-        max_allowed_dist = ideal_dist * 1.15  
+        obs_count = details.get('obstacle_count', 0)
+        dynamic_tolerance = 1.0 + (obs_count * 0.005)
+        max_allowed_dist = ideal_dist * dynamic_tolerance 
         
         # 绕路诊断
         if is_perfectly_safe and details.get('distance', 0) > max_allowed_dist:
-            print(f"  [警告] 路线已安全，但总航程 {details.get('distance'):.1f}m 超过了动态底线 {max_allowed_dist:.1f}m，存在绕路！")
+            print(f"  [警告] 路线安全，但总航程 {details.get('distance'):.1f}m 超过动态底线 {max_allowed_dist:.1f}m (容忍度:{dynamic_tolerance:.2f}x)，存在绕路！")
             
             if current_algo == "PSO":
                 specific_params['c2'] = 1.0 
@@ -103,7 +107,7 @@ class CoordinatorAgent:
             if self.stuck_counter >= 1:
                 # 卡壳：说明安全阈值卡得太死，麻雀不敢飞
                 specific_params['ST'] = 0.6  # 降低安全阈值，逼迫麻雀产生危机感，大范围飞离
-                actions_taken.append("TUNE_SSA: 降低安全阈值 ST=0.6，强制打散局部僵局")
+                actions_taken.append("TUNE_SSA: 降低安全阈值 ST=0.6, 强制打散局部僵局")
 
         # ---- 【D. 灰狼优化系统 (GWO)】 ----
         elif current_algo == "GWO":

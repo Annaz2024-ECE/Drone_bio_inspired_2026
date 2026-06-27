@@ -30,8 +30,8 @@ def run_parameter_tuning_loop():
         "WOA": WOAPlanner
     }
     
-    # 🎯 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "ACO"  # 比如今天你想测试一下 PSO 的专属调参
+    # 你只需修改这里！想测谁，就改成谁的名字
+    TARGET_ALGO = "DSACO"  # 比如今天你想测试一下 PSO 的专属调参
     # ==========================================
     
     print(f"  [系统加载] 正在实例化 {TARGET_ALGO} 施工队...")
