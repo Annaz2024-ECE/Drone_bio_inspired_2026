@@ -45,21 +45,21 @@ class WOAPlannerArg(BasePlanner):
         for i in range(self.pop_size):
             # 生成基础插值点
             if i < tier_size:
-                x_vals = np.linspace(self.env.start_point[0], self.env.end_point[0], self.num_waypoints + 2)[1:-1].tolist()
-                y_vals = np.linspace(self.env.start_point[1], self.env.end_point[1], self.num_waypoints + 2)[1:-1].tolist()
+                x_vals = np.linspace(self.env.start_point[0], west_center[0], self.num_waypoints + 2)[1:-1].tolist()
+                y_vals = np.linspace(self.env.start_point[1], west_center[1], self.num_waypoints + 2)[1:-1].tolist()
             elif i < 2 * tier_size:
                 mid_idx = self.num_waypoints // 2
-                x_vals1 = np.linspace(self.env.start_point[0], west_center[0], mid_idx + 2)[1:].tolist()
-                y_vals1 = np.linspace(self.env.start_point[1], west_center[1], mid_idx + 2)[1:].tolist()
+                x_vals1 = np.linspace(west_center[0], east_center[0], mid_idx + 2)[1:].tolist()
+                y_vals1 = np.linspace(west_center[1], east_center[1], mid_idx + 2)[1:].tolist()
                 rem_points = self.num_waypoints - len(x_vals1)
-                x_vals2 = np.linspace(west_center[0], self.env.end_point[0], rem_points + 2)[1:-1].tolist()
-                y_vals2 = np.linspace(west_center[1], self.env.end_point[1], rem_points + 2)[1:-1].tolist()
+                x_vals2 = np.linspace(west_center[0], east_center[0], rem_points + 2)[1:-1].tolist()
+                y_vals2 = np.linspace(west_center[1], east_center[1], rem_points + 2)[1:-1].tolist()
                 x_vals = x_vals1 + x_vals2
                 y_vals = y_vals1 + y_vals2
             else:
                 mid_idx = self.num_waypoints // 2
-                x_vals1 = np.linspace(self.env.start_point[0], east_center[0], mid_idx + 2)[1:].tolist()
-                y_vals1 = np.linspace(self.env.start_point[1], east_center[1], mid_idx + 2)[1:].tolist()
+                x_vals1 = np.linspace(self.env.end_point[0], east_center[0], mid_idx + 2)[1:].tolist()
+                y_vals1 = np.linspace(self.env.end_point[1], east_center[1], mid_idx + 2)[1:].tolist()
                 rem_points = self.num_waypoints - len(x_vals1)
                 x_vals2 = np.linspace(east_center[0], self.env.end_point[0], rem_points + 2)[1:-1].tolist()
                 y_vals2 = np.linspace(east_center[1], self.env.end_point[1], rem_points + 2)[1:-1].tolist()
