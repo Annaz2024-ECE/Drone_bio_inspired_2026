@@ -27,7 +27,7 @@ class CoordinatorAgent:
         # ==========================================
         improvement = self.last_score - total_score
         if self.last_score == float('inf'):
-            improvement_rate = 1.0  # 第一轮算作 100% 进步
+            improvement_rate = 1.0  # 第一轮算作 100% 进步，至少跑完一轮
         else:
             improvement_rate = max(0, improvement) / (self.last_score + 1e-8) 
             
@@ -41,6 +41,29 @@ class CoordinatorAgent:
             print(f"   [全局通知] 路线已绝对安全，且收敛至极限(进步率 < 1%)，申请提前交卷！")
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished
+
+        # 障碍物越多，容忍的绕路倍数就越大！
+        # 比如：0个障碍物 -> 1.0倍； 30个障碍物 -> 1.15倍； 100个障碍物 -> 1.5倍
+        ideal_dist = details.get('ideal_distance', 100.0)
+        obs_count = details.get('obstacle_count', 0)
+        dynamic_tolerance = 1.0 + (obs_count * 0.005)
+        max_allowed_dist = ideal_dist * dynamic_tolerance 
+        
+        # 绕路诊断
+        if is_perfectly_safe and details.get('distance', 0) > max_allowed_dist:
+            print(f"  [警告] 路线安全，但总航程 {details.get('distance'):.1f}m 超过动态底线 {max_allowed_dist:.1f}m (容忍度:{dynamic_tolerance:.2f}x)，存在绕路！")
+            
+            if current_algo == "PSO":
+                specific_params['c2'] = 1.0 
+                actions_taken.append("TUNE_PSO: 降低社会认知 c2, 减少绕路甩尾，强行拉直航线")
+                
+            elif current_algo in ["ACO", "DSACO"]:
+                specific_params['beta'] = 6.0 
+                actions_taken.append(f"TUNE_{current_algo}: 极度强化目标牵引 beta=6.0, 强行拉直路线")
+                
+            elif current_algo == "SSA":
+                specific_params['ST'] = 0.9 
+                actions_taken.append("TUNE_SSA: 提高安全阈值 ST=0.9, 让麻雀安心走直线少乱跳")
 
         # 判定卡壳状态
         is_failing = details.get('fatal_collision', 0) > 0 or details.get('missed_target', 0) > 0
@@ -84,7 +107,7 @@ class CoordinatorAgent:
             if self.stuck_counter >= 1:
                 # 卡壳：说明安全阈值卡得太死，麻雀不敢飞
                 specific_params['ST'] = 0.6  # 降低安全阈值，逼迫麻雀产生危机感，大范围飞离
-                actions_taken.append("TUNE_SSA: 降低安全阈值 ST=0.6，强制打散局部僵局")
+                actions_taken.append("TUNE_SSA: 降低安全阈值 ST=0.6, 强制打散局部僵局")
 
         # ---- 【D. 灰狼优化系统 (GWO)】 ----
         elif current_algo == "GWO":

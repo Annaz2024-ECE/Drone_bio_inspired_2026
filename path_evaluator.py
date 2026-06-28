@@ -22,6 +22,25 @@ class PathEvaluator:
             'min_waypoint_dist': 5.0,    # 航点弹簧排斥距离
             'margin_layers': [0.25, 0.16, 0.12, 0.08, 0.04] # 遇台风天可由智能体动态加宽
         }
+        
+        self.ideal_min_distance = self._calculate_ideal_min_distance()
+        print(f" [环境加载] 当前地图理论最短直线距离: {self.ideal_min_distance:.1f} 米")
+
+    def _calculate_ideal_min_distance(self):
+        """ 计算 起点 -> 所有打卡点 -> 终点 的橡皮筋直线距离 """
+        pts = [self.env.start_point]
+        
+        # 提取所有打卡点的圆心，并按 X 坐标排序（模拟顺路飞行的逻辑）
+        targets = [t['center'] for t in self.env.target_areas]
+        targets.sort(key=lambda p: p[0])
+        
+        pts.extend(targets)
+        pts.append(self.env.end_point)
+
+        dist = 0.0
+        for i in range(len(pts) - 1):
+            dist += self.env.calculate_distance(pts[i], pts[i+1])
+        return dist
 
     def update_params(self, new_penalties=None, new_params=None):
         """
@@ -204,7 +223,10 @@ class PathEvaluator:
             'missed_target': 0.0      # 漏打卡扣分
         }
         # 基础距离
-        distance = self.calculate_path_length(path_points)
+        raw_distance = self.calculate_path_length(path_points)
+        distance_weight = 1.0  # 权重：1米 = 1分
+        details['distance'] = raw_distance * distance_weight
+        details['ideal_distance'] = self.ideal_min_distance
         
         # 动态读取参数
         # 洋葱皮线性惩罚模型：把 0.25 的安全区切成 5 层
@@ -256,9 +278,11 @@ class PathEvaluator:
 
         # 3. 调用引力梯度目标惩罚
         details['missed_target'] += self.calculate_target_penalty(path_points)
+
+        details['obstacle_count'] = len(self.env.obstacles) # 把环境里的障碍物总数也一并塞进去
                 
-        # 最终得分
-        total_score = sum(details.values())
+        # 最终得分（不算理想得分）
+        total_score = sum(v for k, v in details.items() if k not in ['ideal_distance', 'obstacle_count'])
         return total_score, details
 
     def evaluate_pso_particle(self, raw_waypoints):
@@ -279,7 +303,7 @@ class PathEvaluator:
         details['spacing_penalty'] = spacing_penalty
         
         # 重新核算最终总分 (因为加入了 spacing_penalty)
-        total_score = sum(details.values())
+        total_score = sum(v for k, v in details.items() if k not in ['ideal_distance', 'obstacle_count'])
         
         return total_score, details
 
