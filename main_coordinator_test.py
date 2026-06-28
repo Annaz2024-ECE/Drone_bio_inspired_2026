@@ -8,7 +8,7 @@ from dsaco_planner import DSACOPlanner
 from pso_planner import PSOPlanner
 from gwo_planner import GWOPlanner
 from ssa_planner import SSAPlanner
-from woa_planner_fix import WOAPlannerArg
+from woa_planner_copygwo import WOAPlanner
 
 def run_parameter_tuning_loop():
     print("=" * 60)
@@ -27,7 +27,7 @@ def run_parameter_tuning_loop():
         "PSO": PSOPlanner,
         "GWO": GWOPlanner,
         "SSA": SSAPlanner,
-        "WOA": WOAPlannerArg
+        "WOA": WOAPlanner
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
