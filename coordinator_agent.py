@@ -11,7 +11,7 @@ class CoordinatorAgent:
         self.stuck_counter = 0
         self.last_score = float('inf')
 
-    def analyze_and_act(self, total_score, details, current_algo):
+    def analyze_and_act(self, total_score, details, env_info, current_algo):
         """
         六大算法全解锁的【终极调参大脑】
         """
