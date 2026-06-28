@@ -48,7 +48,7 @@ class PSOPlanner(BasePlanner):
 
     def optimize(self):
         """ PSO 主循环 """
-        print("🚀 开始 PSO 粒子群算法路径规划...")
+        print("开始 PSO 粒子群算法路径规划...")
         
         # 初始评估
         for i in range(self.num_particles):

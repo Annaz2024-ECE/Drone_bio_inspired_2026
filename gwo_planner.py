@@ -22,7 +22,7 @@ class GWOPlanner(BasePlanner):
                 self.positions[i, 6], self.positions[i, 7] = 78.0, 70.0
 
     def optimize(self):
-        print("🚀 开始 GWO 灰狼优化算法路径规划...")
+        print("开始 GWO 灰狼优化算法路径规划...")
         
         for l in range(self.max_iter):
             for i in range(self.num_wolves):

@@ -172,8 +172,8 @@ class UAVEnvironment2D:
                     target['name'], ha='center', color='#2e7d32', fontweight='bold')
 
         # 绘制起点(南门)和终点(北门)
-        ax.plot(*self.start_point, '^', color='#d32f2f', markersize=12, label='South Gate (Start)')
-        ax.plot(*self.end_point, '*', color='#fbc02d', markersize=15, label='North Gate (End)', markeredgecolor='black')
+        ax.plot(*self.start_point, '*', color='#fbc02d', markersize=15, label='South Gate (Start)', markeredgecolor='black')
+        ax.plot(*self.end_point, '^', color='#d32f2f', markersize=12, label='North Gate (End)')
         
         ax.grid(True, linestyle=':', alpha=0.7)
         ax.legend(loc='upper right')
@@ -182,54 +182,54 @@ class UAVEnvironment2D:
 # ==========================================
 # 本地测试代码 (仅zxy调试时使用)
 # ==========================================
-# if __name__ == "__main__":
-#     env = UAVEnvironment2D()
+if __name__ == "__main__":
+    env = UAVEnvironment2D()
     
-#     # 1. 绘制环境
-#     fig, ax = plt.subplots(figsize=(10, 10))
-#     env.draw_environment(ax)
+    # 1. 绘制环境
+    fig, ax = plt.subplots(figsize=(10, 10))
+    env.draw_environment(ax)
     
-#     # 2. 测试碰撞检测算法
-#     # 路线1: 绕过障碍物、顺路经过东西目标区域的【安全折线】
-#     p_safe_1 = np.array([43.0, 3.0])
-#     p_safe_2 = np.array([43.0, 28.0]) # 直行穿过南侧两座大建筑的缝隙
-#     p_safe_3 = np.array([25.0, 28.0]) # 直角左转
-#     p_safe_4 = np.array([25.0, 45.0]) # 直行朝北
-#     p_safe_5 = np.array([50.0, 68.0]) # 越过中部教学群上方
-#     p_safe_6 = np.array([78.0, 70.0]) # 进入东侧巡检区
-#     p_safe_7 = np.array([51.0, 94.0]) # 飞向终点
+    # 2. 测试碰撞检测算法
+    # 路线1: 绕过障碍物、顺路经过东西目标区域的【安全折线】
+    p_safe_1 = np.array([43.0, 3.0])
+    p_safe_2 = np.array([43.0, 28.0]) # 直行穿过南侧两座大建筑的缝隙
+    p_safe_3 = np.array([25.0, 28.0]) # 直角左转
+    p_safe_4 = np.array([25.0, 45.0]) # 直行朝北
+    p_safe_5 = np.array([50.0, 68.0]) # 越过中部教学群上方
+    p_safe_6 = np.array([78.0, 70.0]) # 进入东侧巡检区
+    p_safe_7 = np.array([51.0, 94.0]) # 飞向终点
     
-#     # 路线2: 故意横穿中心障碍圆的【碰撞折线】
-#     p_collide_1 = np.array([43.0, 3.0])
-#     p_collide_2 = np.array([43.0, 50.0]) # 这一段会精准穿过 [43, 38] 圆形障碍物
-#     p_collide_3 = np.array([51.0, 94.0])
+    # 路线2: 故意横穿中心障碍圆的【碰撞折线】
+    p_collide_1 = np.array([43.0, 3.0])
+    p_collide_2 = np.array([43.0, 50.0]) # 这一段会精准穿过 [43, 38] 圆形障碍物
+    p_collide_3 = np.array([51.0, 94.0])
     
-#     # 检测所有安全线段
-#     safe_collision = (env.is_segment_collision(p_safe_1, p_safe_2) or 
-#                       env.is_segment_collision(p_safe_2, p_safe_3) or 
-#                       env.is_segment_collision(p_safe_3, p_safe_4) or 
-#                       env.is_segment_collision(p_safe_4, p_safe_5) or 
-#                       env.is_segment_collision(p_safe_5, p_safe_6) or
-#                       env.is_segment_collision(p_safe_6, p_safe_7))
+    # 检测所有安全线段
+    safe_collision = (env.is_segment_collision(p_safe_1, p_safe_2) or 
+                      env.is_segment_collision(p_safe_2, p_safe_3) or 
+                      env.is_segment_collision(p_safe_3, p_safe_4) or 
+                      env.is_segment_collision(p_safe_4, p_safe_5) or 
+                      env.is_segment_collision(p_safe_5, p_safe_6) or
+                      env.is_segment_collision(p_safe_6, p_safe_7))
                       
-#     # 检测碰撞线段
-#     collide_collision = (env.is_segment_collision(p_collide_1, p_collide_2) or 
-#                          env.is_segment_collision(p_collide_2, p_collide_3))
+    # 检测碰撞线段
+    collide_collision = (env.is_segment_collision(p_collide_1, p_collide_2) or 
+                         env.is_segment_collision(p_collide_2, p_collide_3))
     
-#     print("-" * 30)
-#     print(f"✅ 测试 - 多段安全折线相交检测 (应为False): {safe_collision}")
-#     print(f"❌ 测试 - 碰撞线段相交检测 (应为True): {collide_collision}")
-#     print("-" * 30)
+    print("-" * 30)
+    print(f"✅ 测试 - 多段安全折线相交检测 (应为False): {safe_collision}")
+    print(f"❌ 测试 - 碰撞线段相交检测 (应为True): {collide_collision}")
+    print("-" * 30)
     
-#     # 在图上画出这两条测试路线
-#     safe_xs = [p_safe_1[0], p_safe_2[0], p_safe_3[0], p_safe_4[0], p_safe_5[0], p_safe_6[0], p_safe_7[0]]
-#     safe_ys = [p_safe_1[1], p_safe_2[1], p_safe_3[1], p_safe_4[1], p_safe_5[1], p_safe_6[1], p_safe_7[1]]
-#     ax.plot(safe_xs, safe_ys, color='#4caf50', linestyle='-', linewidth=2.5, label='Safe Test Path')
+    # 在图上画出这两条测试路线
+    safe_xs = [p_safe_1[0], p_safe_2[0], p_safe_3[0], p_safe_4[0], p_safe_5[0], p_safe_6[0], p_safe_7[0]]
+    safe_ys = [p_safe_1[1], p_safe_2[1], p_safe_3[1], p_safe_4[1], p_safe_5[1], p_safe_6[1], p_safe_7[1]]
+    ax.plot(safe_xs, safe_ys, color='#4caf50', linestyle='-', linewidth=2.5, label='Safe Test Path')
             
-#     collide_xs = [p_collide_1[0], p_collide_2[0], p_collide_3[0]]
-#     collide_ys = [p_collide_1[1], p_collide_2[1], p_collide_3[1]]
-#     ax.plot(collide_xs, collide_ys, color='#f44336', linestyle='--', linewidth=2.5, label='Collision Test Path')
+    collide_xs = [p_collide_1[0], p_collide_2[0], p_collide_3[0]]
+    collide_ys = [p_collide_1[1], p_collide_2[1], p_collide_3[1]]
+    ax.plot(collide_xs, collide_ys, color='#f44336', linestyle='--', linewidth=2.5, label='Collision Test Path')
             
-#     ax.legend(loc='upper right')
-#     plt.tight_layout()
-#     plt.show()
+    ax.legend(loc='upper right')
+    plt.tight_layout()
+    plt.show()

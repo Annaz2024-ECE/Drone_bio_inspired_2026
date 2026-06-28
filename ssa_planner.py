@@ -50,7 +50,7 @@ class SSAPlanner(BasePlanner):
 
     def optimize(self):
         """ 运行 SSA 主循环 """
-        print("🚀 开始 SSA 麻雀搜索算法路径规划...")
+        print("开始 SSA 麻雀搜索算法路径规划...")
         
         # 1. 初始适应度评估
         for i in range(self.num_sparrows):
