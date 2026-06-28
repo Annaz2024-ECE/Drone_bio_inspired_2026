@@ -227,7 +227,7 @@ class PathEvaluator:
         raw_distance = self.calculate_path_length(path_points)
         distance_weight = 1.0  # 权重：1米 = 1分
         details['distance'] = raw_distance * distance_weight
-        details['ideal_distance'] = self.ideal_min_distance
+        # details['ideal_distance'] = self.ideal_min_distance
         
         # 动态读取参数
         # 洋葱皮线性惩罚模型：把 0.25 的安全区切成 5 层
