@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from pso_planner import PSOPlanner
 from ssa_planner import SSAPlanner
 from gwo_planner import GWOPlanner
-from aco_planner import ACOPlanner
+from dsaco_planner import DSACOPlanner
 from woa_planner import WOAPlanner
 
 from path_evaluator import PathEvaluator
@@ -97,17 +97,17 @@ class Algorithm_Select_Agent:
                 return GWOPlanner(evaluator=self.evaluator, num_wolves=80, num_waypoints=10, max_iter=200)
 
         # ==========================================
-        # 4. 全局最优测绘情景 (Global Optimal) -> 偏好 ACO
+        # 4. 全局最优测绘情景 (Global Optimal) -> 偏好 DSACO
         # ==========================================
         elif self.task_priority == 'global_optimal':
             print("   -> 场景感知: 校园复杂地形测绘，追求全局最短路。")
-            print("   -> 首选算法: 🏆 ACO (蚁群优化算法)")
+            print("   -> 首选算法: 🏆 DSACO (蚁群优化算法)")
             if complexity == "High":
                 print("   -> 环境自适应调参: 障碍极多，网格需要划分更细。蚂蚁数 60，分段数 11。")
-                return ACOPlanner(evaluator=self.evaluator, num_ants=60, num_waypoints=11, max_iter=250)
+                return DSACOPlanner(evaluator=self.evaluator, num_ants=60, num_waypoints=11, max_iter=250)
             else:
                 print("   -> 环境自适应调参: 常规网格划分。蚂蚁数 40，分段数 8。")
-                return ACOPlanner(evaluator=self.evaluator, num_ants=40, num_waypoints=8, max_iter=200)
+                return DSACOPlanner(evaluator=self.evaluator, num_ants=40, num_waypoints=8, max_iter=200)
 
         # ==========================================
         # 5. 贴面精细检测情景 (Close Inspection) -> 偏好 WOA

@@ -7,6 +7,7 @@ from ssa_planner import SSAPlanner
 from gwo_planner import GWOPlanner
 from woa_planner import WOAPlanner
 from dsaco_planner import DSACOPlanner
+from aco_planner import ACOPlanner
 
 # 导入三大智能体与评价器
 from path_evaluator import PathEvaluator
@@ -29,8 +30,10 @@ def create_planner_with_params(algo_name, evaluator, algo_params, specific_param
         planner = GWOPlanner(evaluator=evaluator, num_wolves=pop_size, max_iter=max_iter)
     elif algo_name == "WOA":
         planner = WOAPlanner(evaluator=evaluator, pop_size=pop_size, max_iter=max_iter)
-    elif algo_name in ["ACO", "DSACO"]:
+    elif algo_name == "DSACO":
         planner = DSACOPlanner(evaluator=evaluator, num_ants=pop_size, max_iter=max_iter)
+    elif algo_name == "ACO":
+        planner = ACOPlanner(evaluator=evaluator, num_ants=pop_size, max_iter=max_iter)
     else:
         planner = PSOPlanner(evaluator=evaluator)
 
@@ -62,7 +65,7 @@ if __name__ == "__main__":
     # 1. 实例化评价器（包含地图环境）
     evaluator = PathEvaluator()
     # 模拟任务指令 (你可以修改为 'speed', 'safety', 'smoothness' 等测试)
-    current_task = 'smoothness'
+    current_task = 'close_inspection'
     
     # 2. 实例化三大智能体
     opt_agent = Algorithm_Select_Agent(evaluator=evaluator, task_priority=current_task)
@@ -127,7 +130,7 @@ if __name__ == "__main__":
             print(f"\n🚨 [系统告警] {current_algo_name} 已连续 3 轮抢救无效！触发强制换将协议！")
             
             # 简单的换将逻辑 (你可以调用 opt_agent.switch_algorithm，这里写个通用的)
-            fallback_dict = {"PSO": "SSA", "SSA": "DSACO", "GWO": "WOA", "WOA": "PSO", "DSACO": "GWO"}
+            fallback_dict = {"PSO": "SSA", "SSA": "DSACO", "GWO": "WOA", "WOA": "PSO", "DSACO": "ACO", "ACO": "GWO"}
             current_algo_name = fallback_dict.get(current_algo_name, "PSO")
             
             print(f"   -> 🔄 放弃当前算法，已更换为: 🏆 {current_algo_name}")
