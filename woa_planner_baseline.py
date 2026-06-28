@@ -96,7 +96,7 @@ class WOAPlanner:
             # 1. 评估所有个体
             for i in range(self.pop_size):
                 path = self._decode_path(positions[i, :])
-                score,_ = self.evaluator.evaluate_pso_particle(path)
+                score,_ , _ = self.evaluator.evaluate_pso_particle(path)
                 
                 if score < best_score:
                     best_score = score

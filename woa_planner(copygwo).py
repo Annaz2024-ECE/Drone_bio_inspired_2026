@@ -27,7 +27,7 @@ class WOAPlanner(BasePlanner):
         # 2. 评估初始最优
         for i in range(self.pop_size):
             path = self._decode_path(self.positions[i])
-            score, _ = self.evaluator.evaluate_pso_particle(path)
+            score, _ , _ = self.evaluator.evaluate_pso_particle(path)
             if score < self.historical_best_score:
                 self.historical_best_score = score
                 self.historical_best_pos = self.positions[i].copy()
@@ -73,7 +73,7 @@ class WOAPlanner(BasePlanner):
 
                 # 6. 评估并动态更新基类的全局最优
                 path = self._decode_path(self.positions[i])
-                score, _ = self.evaluator.evaluate_pso_particle(path)
+                score, _ , _ = self.evaluator.evaluate_pso_particle(path)
 
                 if score < self.historical_best_score:
                     self.historical_best_score = score

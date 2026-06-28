@@ -121,7 +121,7 @@ class WOAPlanner:
         # 计算初始种群适应度
         for i in range(self.pop_size):
             path = self._decode_path(positions[i, :])
-            score, _ = self.evaluator.evaluate_pso_particle(path)
+            score, _ , _= self.evaluator.evaluate_pso_particle(path)
             if score < best_score:
                 best_score = score
                 best_position = positions[i, :].copy()
@@ -169,7 +169,7 @@ class WOAPlanner:
 
                 # 评估新位置（此时 _decode_path 内部就不需要再重复 argsort 了）
                 path = self._decode_path(positions[i, :])
-                score, _ = self.evaluator.evaluate_pso_particle(path)
+                score, _, _ = self.evaluator.evaluate_pso_particle(path)
 
                 # 更新全局最优 新解不坍缩
                 if score < best_score and np.any(positions[i,:]):

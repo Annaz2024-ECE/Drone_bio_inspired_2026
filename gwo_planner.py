@@ -27,7 +27,7 @@ class GWOPlanner(BasePlanner):
         for l in range(self.max_iter):
             for i in range(self.num_wolves):
                 self.positions[i] = np.clip(self.positions[i], self.lb, self.ub)
-                fitness, _ = self.evaluator.evaluate_pso_particle(self._decode_path(self.positions[i]))
+                fitness, _ , _ = self.evaluator.evaluate_pso_particle(self._decode_path(self.positions[i]))
                 
                 if fitness < self.alpha_score:
                     self.delta_score, self.delta_pos = self.beta_score, self.beta_pos.copy()

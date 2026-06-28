@@ -55,7 +55,7 @@ class SSAPlanner(BasePlanner):
         # 1. 初始适应度评估
         for i in range(self.num_sparrows):
             full_path = self._decode_path(self.sparrows[i])
-            self.fitness[i], _ = self.evaluator.evaluate_pso_particle(full_path)
+            self.fitness[i], _ , _ = self.evaluator.evaluate_pso_particle(full_path)
             if self.fitness[i] < self.gbest_score:
                 self.gbest_score = self.fitness[i]
                 self.gbest_pos = np.copy(self.sparrows[i])
@@ -104,7 +104,7 @@ class SSAPlanner(BasePlanner):
             # (4) 越界处理与适应度重新评估
             for i in range(self.num_sparrows):
                 new_sparrows[i] = np.clip(new_sparrows[i], self.lb, self.ub)
-                score, _ = self.evaluator.evaluate_pso_particle(self._decode_path(new_sparrows[i]))
+                score, _ , _ = self.evaluator.evaluate_pso_particle(self._decode_path(new_sparrows[i]))
                 
                 self.sparrows[i] = new_sparrows[i]
                 self.fitness[i] = score

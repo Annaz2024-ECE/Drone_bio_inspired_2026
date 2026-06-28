@@ -99,7 +99,7 @@ class BasePlanner:
         # 【新增】得分明细提取模块 (左下角)
         # ==========================================
         # 拿算法跑出来的最终路径，去评价器里再测一次，拿到体检报告 (details)
-        _, details = self.evaluator.evaluate_pso_particle(best_path)
+        _, details, _ = self.evaluator.evaluate_pso_particle(best_path)
         
         details_list = []
         for k, v in details.items():

@@ -51,7 +51,7 @@ class DSACOPlanner(BasePlanner):
             for ant in range(self.num_ants):
                 # 传入当前代数 idx，用于计算动态双策略参数 q0
                 path = self._construct_path(idx)
-                fitness, _ = self.evaluator.evaluate_pso_particle(path)
+                fitness, _, _ = self.evaluator.evaluate_pso_particle(path)
                 
                 all_paths.append(path)
                 all_fitness.append(fitness)
