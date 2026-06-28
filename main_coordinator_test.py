@@ -12,14 +12,14 @@ from woa_planner import WOAPlanner
 
 def run_parameter_tuning_loop():
     print("=" * 60)
-    print(" 启动【万能算法专属参数调优】试车场")
+    print(" 启动 [算法专属参数调优 agent]")
     print("=" * 60)
 
     evaluator = PathEvaluator()
     agent = CoordinatorAgent()
     
     # ==========================================
-    # 🌟 核心修改：算法字典映射与一键切换
+    # 核心修改：算法字典映射与一键切换
     # ==========================================
     ALGO_MAP = {
         "ACO": ACOPlanner,
@@ -34,7 +34,7 @@ def run_parameter_tuning_loop():
     TARGET_ALGO = "DSACO"  # 比如今天你想测试一下 PSO 的专属调参
     # ==========================================
     
-    print(f"  [系统加载] 正在实例化 {TARGET_ALGO} 施工队...")
+    print(f"  [系统加载] 正在实例化 {TARGET_ALGO} 算法...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
     
     # ==========================================
@@ -66,7 +66,7 @@ def run_parameter_tuning_loop():
         best_path, history = planner.optimize()
         
         # 2. 终极体检
-        final_score, details = evaluator.evaluate_pso_particle(best_path)
+        final_score, details, env_info = evaluator.evaluate_pso_particle(best_path)
         
         print(f"\n [本轮结算] 得分: {final_score:,.2f}")
         for k, v in details.items():
@@ -75,11 +75,11 @@ def run_parameter_tuning_loop():
         # 3. 提交给老中医，获取更新后的三个字典，以及是否结束的信号
         if round_idx < meta_rounds:
             # 接收新增的第四个返回值
-            algo_params, eval_params, specific_params, is_finished = agent.analyze_and_act(final_score, details, TARGET_ALGO)
+            algo_params, eval_params, specific_params, is_finished = agent.analyze_and_act(final_score, details, env_info, TARGET_ALGO)
             
             # 接收到提前交卷信号，直接跳出循环
             if is_finished:
-                print(f"\n {TARGET_ALGO} 调教完毕！在第 {round_idx} 轮提前达成完美收敛。")
+                print(f"\n {TARGET_ALGO} 完毕调整！在第 {round_idx} 轮提前达成完美收敛。")
                 break
                 
             # 【A】更新评价器参数
@@ -105,7 +105,7 @@ def run_parameter_tuning_loop():
             for param_key, param_value in specific_params.items():
                 if hasattr(planner, param_key):
                     setattr(planner, param_key, param_value)
-                    print(f"  └──  [专属注入] 成功将 {TARGET_ALGO} 的 {param_key} 设为 {param_value}")
+                    print(f"  └──  [专属参数调整] 成功将 {TARGET_ALGO} 的 {param_key} 设为 {param_value}")
 
     # ==========================================
     #  所有调参轮次彻底结束后，输出终极图表

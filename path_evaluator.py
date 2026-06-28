@@ -222,6 +222,7 @@ class PathEvaluator:
             'sharp_turn': 0.0,        # 死亡急转弯扣分
             'missed_target': 0.0      # 漏打卡扣分
         }
+
         # 基础距离
         raw_distance = self.calculate_path_length(path_points)
         distance_weight = 1.0  # 权重：1米 = 1分
@@ -279,11 +280,17 @@ class PathEvaluator:
         # 3. 调用引力梯度目标惩罚
         details['missed_target'] += self.calculate_target_penalty(path_points)
 
-        details['obstacle_count'] = len(self.env.obstacles) # 把环境里的障碍物总数也一并塞进去
+        # 专门的情报字典
+        env_info = {
+            'ideal_distance': self.ideal_min_distance,
+            'obstacle_count': len(self.env.obstacles)
+        }
                 
-        # 最终得分（不算理想得分）
-        total_score = sum(v for k, v in details.items() if k not in ['ideal_distance', 'obstacle_count'])
-        return total_score, details
+        #算总分
+        total_score = sum(details.values())
+        
+        # 返回 3 个值：总分、扣分账本、情报字典
+        return total_score, details, env_info
 
     def evaluate_pso_particle(self, raw_waypoints):
         """
@@ -297,15 +304,15 @@ class PathEvaluator:
         smooth_path = self.generate_chaikin_path(raw_waypoints, iterations=iters)
         
         # 3. 算分与明细
-        base_score, details = self.calculate_fitness(smooth_path)
+        base_score, details, env_info = self.calculate_fitness(smooth_path)
         
         # 将排斥力加入账本
         details['spacing_penalty'] = spacing_penalty
         
         # 重新核算最终总分 (因为加入了 spacing_penalty)
-        total_score = sum(v for k, v in details.items() if k not in ['ideal_distance', 'obstacle_count'])
+        total_score = sum(details.values())
         
-        return total_score, details
+        return total_score, details, env_info
 
 # syc自测用；debug用
 if __name__ == "__main__":
@@ -327,12 +334,12 @@ if __name__ == "__main__":
     ]
 
     print("=" * 50)
-    print("🚀 开始执行 终极黑盒API 压力测试...")
+    print("开始执行 终极黑盒API 压力测试...")
     print("=" * 50)
 
     for name, raw_path in test_cases:
         # 【修改点】：同时接收 score 和 details
-        score, details = evaluator.evaluate_pso_particle(raw_path)
+        score, details, env_info = evaluator.evaluate_pso_particle(raw_path)
         
         print(f"【{name}】")
         if score > 5000:

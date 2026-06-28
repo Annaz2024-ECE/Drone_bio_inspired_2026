@@ -20,7 +20,7 @@ class CoordinatorAgent:
         specific_params = {} 
         is_finished = False 
         
-        print(f"\n[调参老中医] 第 {self.meta_iteration} 轮诊断中... (负责压榨 {current_algo} 的极限)")
+        print(f"\n[调参] 第 {self.meta_iteration} 轮诊断中... (负责压榨 {current_algo} 的极限)")
 
         # ==========================================
         # 0. 收敛极限与早停判定 (榨汁机逻辑)
@@ -38,20 +38,21 @@ class CoordinatorAgent:
                              details.get('sharp_turn', 0) == 0)
         
         if is_perfectly_safe and (self.meta_iteration > 1) and (improvement_rate < 0.01):
-            print(f"   [全局通知] 路线已绝对安全，且收敛至极限(进步率 < 1%)，申请提前交卷！")
+            print(f"   [全局通知] 路线已绝对安全，且收敛至极限(进步率 < 1%)，申请提前结束")
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished
 
         # 障碍物越多，容忍的绕路倍数就越大！
         # 比如：0个障碍物 -> 1.0倍； 30个障碍物 -> 1.15倍； 100个障碍物 -> 1.5倍
-        ideal_dist = details.get('ideal_distance', 100.0)
-        obs_count = details.get('obstacle_count', 0)
+        ideal_dist = env_info.get('ideal_distance', 100.0)
+        obs_count = env_info.get('obstacle_count', 0)
+        
         dynamic_tolerance = 1.0 + (obs_count * 0.005)
-        max_allowed_dist = ideal_dist * dynamic_tolerance 
+        max_allowed_dist = ideal_dist * dynamic_tolerance
         
         # 绕路诊断
         if is_perfectly_safe and details.get('distance', 0) > max_allowed_dist:
-            print(f"  [警告] 路线安全，但总航程 {details.get('distance'):.1f}m 超过动态底线 {max_allowed_dist:.1f}m (容忍度:{dynamic_tolerance:.2f}x)，存在绕路！")
+            print(f"  [警告] 路线安全，但总航程 {details.get('distance'):.1f}m 超过动态底线 {max_allowed_dist:.1f}m (容忍度:{dynamic_tolerance:.2f}x)，存在绕路")
             
             if current_algo == "PSO":
                 specific_params['c2'] = 1.0 
@@ -63,7 +64,7 @@ class CoordinatorAgent:
                 
             elif current_algo == "SSA":
                 specific_params['ST'] = 0.9 
-                actions_taken.append("TUNE_SSA: 提高安全阈值 ST=0.9, 让麻雀安心走直线少乱跳")
+                actions_taken.append("TUNE_SSA: 提高安全阈值 ST=0.9, 减少麻雀乱跳, 多走直线")
 
         # 判定卡壳状态
         is_failing = details.get('fatal_collision', 0) > 0 or details.get('missed_target', 0) > 0
@@ -123,6 +124,17 @@ class CoordinatorAgent:
                 # 鲸鱼路线太崎岖：说明螺旋攻击范围过大甩尾严重
                 specific_params['b'] = 0.4  # 减小对数螺旋线系数，收紧气泡网
                 actions_taken.append("TUNE_WOA: 减小对数螺旋系数 b=0.4, 收紧气泡网以细腻局部轨迹")
+            
+            if details.get('spacing_penalty', 0) > 100:
+                # 药方 1 (数学魔法)：把螺旋线系数 b 突然放大，让气泡网扩张，强行把挤在一起的航点甩开
+                specific_params['b'] = 2.0  
+                actions_taken.append("TUNE_WOA: 增大螺旋系数 b=2.0, 扩张气泡网以打散聚集的航点")
+                
+                # 药方 2 (物理宽容)：因为鲸鱼的数学特性就是爱聚集，在路线安全的前提下，稍微放宽对它的弹簧排斥要求
+                if self.eval_params.get('min_waypoint_dist', 5.0) > 2.0:
+                    self.eval_params['min_waypoint_dist'] -= 0.5
+                    actions_taken.append("MACRO: 针对鲸鱼聚集特性，稍微下调物理最小航点排斥距离")
+
             if details.get('missed_target', 0) > 0:
                 # 漏打卡：说明全局围捕半径太大，错过了猎物
                 actions_taken.append("TUNE_WOA: 激活外环资源，通过共性参数加派鲸鱼数量")
