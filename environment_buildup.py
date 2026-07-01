@@ -11,9 +11,9 @@ class UAVEnvironment2D:
         self.x_bounds = [0, 100]
         self.y_bounds = [0, 100]
         
-        # 2. 起点和终点 (模拟从南校门飞往北校门)
+        # 2. 起点和终点 (模拟从南校门进出)
         self.start_point = np.array([43.0, 3.0])
-        self.end_point = np.array([51.0, 94.0])
+        self.end_point = np.array([43.0, 3.0])
         
         # 3. 障碍物集合 (支持 'rect' 和 'circle')
         # 依据海宁校区平面图，将建筑群简化为矩形和圆形
@@ -55,10 +55,21 @@ class UAVEnvironment2D:
             {'type': 'rect', 'bottom_left': np.array([72, 86]), 'width': 3, 'height': 3}      # 22
         ]
         
-        # 4. 目标巡检区域（假设需要顺路侦视的重点区域）
+        # 4. 目标巡检区域（校区低洼地带）
         self.target_areas = [
-            {'center': np.array([22.0, 40.0]), 'radius': 6.0, 'name': 'West Area'},
-            {'center': np.array([78.0, 70.0]), 'radius': 6.0, 'name': 'East Area'}
+            {'center': np.array([28.0, 13.0]), 'radius': 2.0, 'name': 'P5'},
+            {'center': np.array([29.0, 28.0]), 'radius': 2.0, 'name': 'P6'},
+            {'center': np.array([29.0, 40.0]), 'radius': 2.0, 'name': 'P7'},
+            {'center': np.array([17.0, 46.0]), 'radius': 2.0, 'name': 'P8'},
+            {'center': np.array([54.0, 69.0]), 'radius': 2.0, 'name': 'P1'},
+            {'center': np.array([60.0, 39.0]), 'radius': 2.0, 'name': 'P2'},
+            {'center': np.array([58.0, 25.0]), 'radius': 2.0, 'name': 'P3'},
+            {'center': np.array([58.0, 14.0]), 'radius': 2.0, 'name': 'P4'},
+            
+            {'center': np.array([43.0, 54.0]), 'radius': 8.0, 'name': 'lake'},
+            {'center': np.array([28.0, 63.0]), 'radius': 2.0, 'name': 'river'},
+
+            {'center': np.array([63.0, 81.0]), 'radius': 3.0, 'name': 'playground'}
         ]
 
     def calculate_distance(self, point1, point2):
@@ -172,8 +183,8 @@ class UAVEnvironment2D:
                     target['name'], ha='center', color='#2e7d32', fontweight='bold')
 
         # 绘制起点(南门)和终点(北门)
-        ax.plot(*self.start_point, '*', color='#fbc02d', markersize=15, label='South Gate (Start)', markeredgecolor='black')
-        ax.plot(*self.end_point, '^', color='#d32f2f', markersize=12, label='North Gate (End)')
+        #ax.plot(*self.start_point, '*', color='#fbc02d', markersize=15, label='South Gate (Start)', markeredgecolor='black')
+        ax.plot(*self.end_point, '^', color='#d32f2f', markersize=12, label='South Gate (Start & End)')
         
         ax.grid(True, linestyle=':', alpha=0.7)
         ax.legend(loc='upper right')
