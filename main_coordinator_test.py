@@ -31,7 +31,7 @@ def run_parameter_tuning_loop():
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "PSO"  # 比如今天你想测试一下 PSO 的专属调参
+    TARGET_ALGO = "GWO"  # 比如今天你想测试一下 PSO 的专属调参
     # ==========================================
     
     print(f"  [系统加载] 正在实例化 {TARGET_ALGO} 算法...")
