@@ -59,13 +59,13 @@ def create_planner_with_params(algo_name, evaluator, algo_params, specific_param
 # ==========================================
 if __name__ == "__main__":
     print("\n" + "★" * 60)
-    print("🚀 多智能体协同无人机路径规划系统 - 启动")
+    print("多智能体协同无人机路径规划系统 - 启动")
     print("★" * 60)
 
     # 1. 实例化评价器（包含地图环境）
     evaluator = PathEvaluator()
     # 模拟任务指令 (你可以修改为 'speed', 'safety', 'smoothness' 等测试)
-    current_task = 'close_inspection'
+    current_task = 'speed'
     
     # 2. 实例化三大智能体
     opt_agent = Algorithm_Select_Agent(evaluator=evaluator, task_priority=current_task)
@@ -88,7 +88,7 @@ if __name__ == "__main__":
 
     for meta_iter in range(1, MAX_META_ITERATIONS + 1):
         print(f"\n" + "=" * 50)
-        print(f"🔄 【第 {meta_iter} 大轮寻优开始】 当前派兵: {current_algo_name}")
+        print(f"【第 {meta_iter} 大轮寻优开始】 当前算法: {current_algo_name}")
         print("=" * 50)
         
         # 【框图节点2】：实例化底层仿生学算法
@@ -122,18 +122,18 @@ if __name__ == "__main__":
         
         # 判断是否满足分数要求，提前交卷
         if is_finished:
-            print("\n✅ 协调决策智能体审核通过：路线绝对安全，提前结束寻优！")
+            print("\n协调决策智能体审核通过：路线绝对安全，提前结束寻优！")
             break
             
         # 【框图节点7】：一定次数后仍不达标，尝试更换算法！
         if coord_agent.stuck_counter >= 3:
-            print(f"\n🚨 [系统告警] {current_algo_name} 已连续 3 轮抢救无效！触发强制换将协议！")
+            print(f"\n[系统告警] {current_algo_name} 已连续 3 轮抢救无效！强制切换算法！")
             
             # 简单的换将逻辑 (你可以调用 opt_agent.switch_algorithm，这里写个通用的)
             fallback_dict = {"PSO": "SSA", "SSA": "DSACO", "GWO": "WOA", "WOA": "PSO", "DSACO": "ACO", "ACO": "GWO"}
             current_algo_name = fallback_dict.get(current_algo_name, "PSO")
             
-            print(f"   -> 🔄 放弃当前算法，已更换为: 🏆 {current_algo_name}")
+            print(f"   -> 放弃当前算法，已更换为: {current_algo_name}")
             coord_agent.stuck_counter = 0 # 换将后重置卡壳计数器
             # 为了防止新算法受旧参数影响，清空专属药方
             current_specific_params = {} 
@@ -141,6 +141,6 @@ if __name__ == "__main__":
     # ==========================================
     # 寻优结束，调用最终画图
     # ==========================================
-    print(f"\n🏁 终极规划完成！最终全局得分: {global_best_score:,.2f}")
+    print(f"\n终极规划完成！最终全局得分: {global_best_score:,.2f}")
     # 借用最后一个 planner 实例的画图功能
     planner.plot_result(global_best_path, full_convergence_history, algo_name=f"Final_{current_algo_name}")
