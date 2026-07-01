@@ -15,11 +15,26 @@ class GWOPlanner(BasePlanner):
         self.positions = np.random.uniform(self.lb, self.ub, (self.num_wolves, self.dim))
         
         # 强制精英狼踩在目标点上
+        # 强制精英狼踩在目标点上 (全自动环境读取版)
         top_30_percent = int(self.num_wolves * 0.3)
+        
+        # 1. 动态从环境读取所有打卡点的坐标
+        targets = [t['center'] for t in self.env.target_areas]
+        
+        # 2. 顺手加个“雷达扫描”排序，防止打卡点连线交叉打结
+        center_x = (self.env.x_bounds[0] + self.env.x_bounds[1]) / 2.0
+        center_y = (self.env.y_bounds[0] + self.env.y_bounds[1]) / 2.0
+        targets.sort(key=lambda p: np.arctan2(p[1] - center_y, p[0] - center_x))
+        
+        # 3. 自动把排好序的打卡点，按顺序塞进精英狼的基因(数组)里
         for i in range(top_30_percent):
-            if self.dim >= 8:
-                self.positions[i, 2], self.positions[i, 3] = 22.0, 40.0 
-                self.positions[i, 6], self.positions[i, 7] = 78.0, 70.0
+            for j, target_pt in enumerate(targets):
+                idx_x = j * 2
+                idx_y = j * 2 + 1
+                # 只要控制点维度够装，就一直往里塞
+                if idx_y < self.dim:
+                    self.positions[i, idx_x] = target_pt[0]
+                    self.positions[i, idx_y] = target_pt[1]
 
     def optimize(self):
         print("开始 GWO 灰狼优化算法路径规划...")

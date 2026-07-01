@@ -26,26 +26,30 @@ class PSOPlanner(BasePlanner):
         self.gbest_score = np.inf
 
     def _initialize_particles(self):
-        """ 初始化粒子并实施投影排序防打结策略 """
+        """ 
+        闭环专属初始化：全图随机撒点 + 极坐标雷达扫描排序 (防打结) 
+        """
         particles = np.zeros((self.num_particles, self.dim))
-        direction_vec = self.env.end_point - self.env.start_point
+        
+        # 1. 寻找地图的近似中心点 (用于充当雷达中心)
+        center_x = (self.env.x_bounds[0] + self.env.x_bounds[1]) / 2.0
+        center_y = (self.env.y_bounds[0] + self.env.y_bounds[1]) / 2.0
         
         for i in range(self.num_particles):
-            x_vals = np.linspace(self.env.start_point[0], self.env.end_point[0], self.num_waypoints + 2)[1:-1]
-            y_vals = np.linspace(self.env.start_point[1], self.env.end_point[1], self.num_waypoints + 2)[1:-1]
+            # 2. 在整个地图范围内广泛随机撒点 (稍微避开极端的贴墙边缘)
+            rand_x = np.random.uniform(self.env.x_bounds[0] + 5, self.env.x_bounds[1] - 5, self.num_waypoints)
+            rand_y = np.random.uniform(self.env.y_bounds[0] + 5, self.env.y_bounds[1] - 5, self.num_waypoints)
+            raw_waypoints = np.column_stack((rand_x, rand_y))
             
-            noise_x = np.random.uniform(-40, 40, self.num_waypoints)
-            noise_y = np.random.uniform(-40, 40, self.num_waypoints)
-            raw_waypoints = np.column_stack((x_vals + noise_x, y_vals + noise_y))
+            # 3. 闭环防打结核心：算每个点相对于地图中心的极坐标角度 (arctan2)
+            # 角度范围从 -π 到 π，按角度排序就能把杂乱的点串成一个环！
+            angles = np.arctan2(raw_waypoints[:, 1] - center_y, raw_waypoints[:, 0] - center_x)
+            sorted_waypoints = raw_waypoints[np.argsort(angles)]
             
-            projections = np.dot(raw_waypoints - self.env.start_point, direction_vec)
-            sorted_waypoints = raw_waypoints[np.argsort(projections)]
-            
-            # 展平为一维存入，并限制边界
+            # 4. 展平并限制边界
             particles[i] = np.clip(sorted_waypoints.flatten(), self.lb, self.ub)
             
         return particles
-
     def optimize(self):
         """ PSO 主循环 """
         print("开始 PSO 粒子群算法路径规划...")
