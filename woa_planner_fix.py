@@ -17,7 +17,7 @@ class WOAPlannerArg(BasePlanner):
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
         self.pop_size = pop_size
-
+        self.positions = np.random.uniform(self.lb, self.ub, (self.pop_size, self.dim))
         # __init__ 中添加
         self.safe_margin = 3.0   # 或更大，如 5.0
         self.effective_lb = self.lb + self.safe_margin
@@ -33,68 +33,93 @@ class WOAPlannerArg(BasePlanner):
         full_path = np.vstack([self.env.start_point, waypoints, self.env.end_point])
         return full_path
 
-    def _initialize_population(self):
-        positions = np.zeros((self.pop_size, self.dim))
+    # def _initialize_population(self):
+    #     positions = np.zeros((self.pop_size, self.dim))
         
-        west_center = self.env.target_areas[0]['center']
-        east_center = self.env.target_areas[1]['center']
-        tier_size = self.pop_size // 3
+    #     west_center = self.env.target_areas[0]['center']
+    #     east_center = self.env.target_areas[1]['center']
+    #     tier_size = self.pop_size // 3
         
         max_retries = 20    # 每个个体最多重试 20 次
+        '''三路改成了起点-西区 西区-东区 东区-终点（）'''
+        # for i in range(self.pop_size):
+        #     # 生成基础插值点
+        #     if i < tier_size:
+        #         x_vals = np.linspace(self.env.start_point[0], west_center[0], self.num_waypoints + 2)[1:-1].tolist()
+        #         y_vals = np.linspace(self.env.start_point[1], west_center[1], self.num_waypoints + 2)[1:-1].tolist()
+        #     elif i < 2 * tier_size:
+        #         mid_idx = self.num_waypoints // 2
+        #         x_vals1 = np.linspace(west_center[0], east_center[0], mid_idx + 2)[1:].tolist()
+        #         y_vals1 = np.linspace(west_center[1], east_center[1], mid_idx + 2)[1:].tolist()
+        #         rem_points = self.num_waypoints - len(x_vals1)
+        #         x_vals2 = np.linspace(west_center[0], east_center[0], rem_points + 2)[1:-1].tolist()
+        #         y_vals2 = np.linspace(west_center[1], east_center[1], rem_points + 2)[1:-1].tolist()
+        #         x_vals = x_vals1 + x_vals2
+        #         y_vals = y_vals1 + y_vals2
+        #     else:
+        #         mid_idx = self.num_waypoints // 2
+        #         x_vals1 = np.linspace(self.env.end_point[0], east_center[0], mid_idx + 2)[1:].tolist()
+        #         y_vals1 = np.linspace(self.env.end_point[1], east_center[1], mid_idx + 2)[1:].tolist()
+        #         rem_points = self.num_waypoints - len(x_vals1)
+        #         x_vals2 = np.linspace(east_center[0], self.env.end_point[0], rem_points + 2)[1:-1].tolist()
+        #         y_vals2 = np.linspace(east_center[1], self.env.end_point[1], rem_points + 2)[1:-1].tolist()
+        #         x_vals = x_vals1 + x_vals2
+        #         y_vals = y_vals1 + y_vals2
         
-        for i in range(self.pop_size):
-            # 生成基础插值点
-            if i < tier_size:
-                x_vals = np.linspace(self.env.start_point[0], west_center[0], self.num_waypoints + 2)[1:-1].tolist()
-                y_vals = np.linspace(self.env.start_point[1], west_center[1], self.num_waypoints + 2)[1:-1].tolist()
-            elif i < 2 * tier_size:
-                mid_idx = self.num_waypoints // 2
-                x_vals1 = np.linspace(west_center[0], east_center[0], mid_idx + 2)[1:].tolist()
-                y_vals1 = np.linspace(west_center[1], east_center[1], mid_idx + 2)[1:].tolist()
-                rem_points = self.num_waypoints - len(x_vals1)
-                x_vals2 = np.linspace(west_center[0], east_center[0], rem_points + 2)[1:-1].tolist()
-                y_vals2 = np.linspace(west_center[1], east_center[1], rem_points + 2)[1:-1].tolist()
-                x_vals = x_vals1 + x_vals2
-                y_vals = y_vals1 + y_vals2
-            else:
-                mid_idx = self.num_waypoints // 2
-                x_vals1 = np.linspace(self.env.end_point[0], east_center[0], mid_idx + 2)[1:].tolist()
-                y_vals1 = np.linspace(self.env.end_point[1], east_center[1], mid_idx + 2)[1:].tolist()
-                rem_points = self.num_waypoints - len(x_vals1)
-                x_vals2 = np.linspace(east_center[0], self.env.end_point[0], rem_points + 2)[1:-1].tolist()
-                y_vals2 = np.linspace(east_center[1], self.env.end_point[1], rem_points + 2)[1:-1].tolist()
-                x_vals = x_vals1 + x_vals2
-                y_vals = y_vals1 + y_vals2
+        # '''1/3插值起终点 1/3插值起点东区 1/3插值起点西区'''
+        # for i in range(self.pop_size):
+        #     # 生成基础插值点
+        #     if i < tier_size:
+        #         x_vals = np.linspace(self.env.start_point[0], self.env.end_point[0], self.num_waypoints + 2)[1:-1].tolist()
+        #         y_vals = np.linspace(self.env.start_point[1], self.env.end_point[1], self.num_waypoints + 2)[1:-1].tolist()
+        #     elif i < 2 * tier_size:
+        #         mid_idx = self.num_waypoints // 2
+        #         x_vals1 = np.linspace(self.env.start_point[0], west_center[0], mid_idx + 2)[1:].tolist()
+        #         y_vals1 = np.linspace(self.env.start_point[1], west_center[1], mid_idx + 2)[1:].tolist()
+        #         rem_points = self.num_waypoints - len(x_vals1)
+        #         x_vals2 = np.linspace(west_center[0], self.env.end_point[0], rem_points + 2)[1:-1].tolist()
+        #         y_vals2 = np.linspace(west_center[1], self.env.end_point[1], rem_points + 2)[1:-1].tolist()
+        #         x_vals = x_vals1 + x_vals2
+        #         y_vals = y_vals1 + y_vals2
+        #     else:
+        #         mid_idx = self.num_waypoints // 2
+        #         x_vals1 = np.linspace(self.env.start_point[0], east_center[0], mid_idx + 2)[1:].tolist()
+        #         y_vals1 = np.linspace(self.env.start_point[1], east_center[1], mid_idx + 2)[1:].tolist()
+        #         rem_points = self.num_waypoints - len(x_vals1)
+        #         x_vals2 = np.linspace(east_center[0], self.env.end_point[0], rem_points + 2)[1:-1].tolist()
+        #         y_vals2 = np.linspace(east_center[1], self.env.end_point[1], rem_points + 2)[1:-1].tolist()
+        #         x_vals = x_vals1 + x_vals2
+        #         y_vals = y_vals1 + y_vals2
+
+        #     base = np.column_stack((x_vals, y_vals)).flatten()
             
-            base = np.column_stack((x_vals, y_vals)).flatten()
-            
-            # 带安全边界检查的噪声添加
-            valid = False
-            for retry in range(max_retries):
-                noise = np.random.uniform(-10, 10, self.dim) if i < tier_size else np.random.uniform(-5, 5, self.dim)
-                candidate = base + noise
-                candidate = np.clip(candidate, self.lb, self.ub)
+        #     # 带安全边界检查的噪声添加
+        #     valid = False
+        #     for retry in range(max_retries):
+        #         noise = np.random.uniform(-10, 10, self.dim) if i < tier_size else np.random.uniform(-5, 5, self.dim)
+        #         candidate = base + noise
+        #         candidate = np.clip(candidate, self.lb, self.ub)
                 
-                if np.all(candidate >= self.effective_lb) and np.all(candidate <= self.effective_ub):
-                    valid = True
-                    break
+        #         if np.all(candidate >= self.effective_lb) and np.all(candidate <= self.effective_ub):
+        #             valid = True
+        #             break
             
-            if not valid:
-                candidate = np.clip(candidate, effective_lb, effective_ub)
+        #     if not valid:
+        #         candidate = np.clip(candidate, effective_lb, effective_ub)
             
-            # Y 轴排序同步
-            candidate_pts = candidate.reshape((self.num_waypoints, 2))
+        #     # Y 轴排序同步
+        #     candidate_pts = candidate.reshape((self.num_waypoints, 2))
             
             
-            # === 新增：强制前 30% 的个体，其第2个和第4个控制点踩在固定目标上 ===
-            # (对应 1D 数组的 index 2,3 和 6,7)
-            if i < self.top_30_percent and self.num_waypoints >= 4:
-                candidate_pts[0] = [22.0, 40.0] 
-                candidate_pts[1] = [78.0, 70.0] 
+        #     # === 新增：强制前 30% 的个体，其第2个和第4个控制点踩在固定目标上 ===
+        #     # (对应 1D 数组的 index 2,3 和 6,7)
+        #     if i < self.top_30_percent and self.num_waypoints >= 4:
+        #         candidate_pts[0] = [22.0, 40.0] 
+        #         candidate_pts[1] = [78.0, 70.0] 
             
-            positions[i, :] = candidate_pts.flatten() # 存入有序的基因
+        #     positions[i, :] = candidate_pts.flatten() # 存入有序的基因
         
-        return positions
+        # return positions
       
     
     def optimize(self):
@@ -104,8 +129,8 @@ class WOAPlannerArg(BasePlanner):
         print("开始 WOA 鲸鱼优化算法路径规划...")
         
         # 1. 初始化种群
-        positions = self._initialize_population()
-
+        #positions = self._initialize_population()
+        positions = np.random.uniform(self.lb, self.ub, (self.pop_size, self.dim))
         # 计算初始种群适应度
         for i in range(self.pop_size):
             path = self._decode_path(positions[i, :])
