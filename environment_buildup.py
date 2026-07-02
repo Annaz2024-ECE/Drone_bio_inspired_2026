@@ -24,47 +24,9 @@ class UAVEnvironment2D:
             if 'center' in o: o['center'] = np.array(o['center'])
             self.obstacles.append(o)
             
-<<<<<<< HEAD
         self.target_areas = data['target_areas']
         for target in self.target_areas:
             target['center'] = np.array(target['center'])
-=======
-            # ==== 西侧教学楼 ====
-            {'type': 'rect', 'bottom_left': np.array([13, 51]), 'width': 5, 'height': 4},     # 25 
-            {'type': 'rect', 'bottom_left': np.array([15, 40]), 'width': 9, 'height': 5},     # 26 
-            {'type': 'rect', 'bottom_left': np.array([20, 36]), 'width': 4, 'height': 4},     # 26 
-            {'type': 'rect', 'bottom_left': np.array([32, 60]), 'width': 4, 'height': 6},     # 24 
-
-            # ==== 东侧教学楼、图书馆、食堂和书院 ====
-            {'type': 'rect', 'bottom_left': np.array([51, 63]), 'width': 6, 'height': 4},     # 21 
-            {'type': 'rect', 'bottom_left': np.array([59, 64]), 'width': 5, 'height': 4},     # 20 
-            {'type': 'rect', 'bottom_left': np.array([61, 57]), 'width': 3, 'height': 5},     # 19 
-            {'type': 'circle', 'center': np.array([56, 59]), 'radius': 3},                    # 18
-
-            {'type': 'rect', 'bottom_left': np.array([59, 44]), 'width': 5, 'height': 7},     # 16
-
-            {'type': 'rect', 'bottom_left': np.array([68, 58]), 'width': 7, 'height': 10},    # 15
-            {'type': 'rect', 'bottom_left': np.array([79, 58]), 'width': 7, 'height': 10},    # 12
-            {'type': 'rect', 'bottom_left': np.array([75, 42]), 'width': 10, 'height': 12},   # 11
-            {'type': 'rect', 'bottom_left': np.array([69, 29]), 'width': 12, 'height': 10},   # 10
-
-            # ==== 北侧体育馆 ====
-            {'type': 'rect', 'bottom_left': np.array([52, 74]), 'width': 6, 'height': 13},    # 23
-            {'type': 'rect', 'bottom_left': np.array([72, 86]), 'width': 3, 'height': 3}      # 22
-        ]
-        
-        # 4. 目标巡检区域（校区低洼地带）
-        self.target_areas = [
-            {'center': np.array([29.0, 28.0]), 'radius': 2.0, 'name': 'P6'},
-            {'center': np.array([60.0, 39.0]), 'radius': 2.0, 'name': 'P2'},
-
-            
-            {'center': np.array([43.0, 54.0]), 'radius': 8.0, 'name': 'lake'},
-            {'center': np.array([28.0, 63.0]), 'radius': 2.0, 'name': 'river'},
-
-            {'center': np.array([63.0, 81.0]), 'radius': 3.0, 'name': 'playground'}
-        ]
->>>>>>> ada14aa (save 7/2)
 
     def calculate_distance(self, point1, point2):
         """ 计算两点之间的欧氏距离 """
