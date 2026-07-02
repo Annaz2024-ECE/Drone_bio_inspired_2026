@@ -175,7 +175,7 @@ class UAVEnvironment2D:
 # 本地测试代码 (仅zxy调试时使用)
 # ==========================================
 if __name__ == "__main__":
-    env = UAVEnvironment2D('maps/zijingang.json5')
+    env = UAVEnvironment2D('maps/haining.json5')
     
     # 1. 绘制环境
     fig, ax = plt.subplots(figsize=(10, 10))
