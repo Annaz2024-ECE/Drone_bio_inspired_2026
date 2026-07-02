@@ -10,7 +10,7 @@ import os
 
 # 请确保图片名称与此一致，且与本脚本在同一目录下
 # 你可以将刚才下载的海宁校区地图重命名为 campus_map.jpg
-IMAGE_PATH = 'haining_map.jpg'
+IMAGE_PATH = 'maps/zijingang_map.jpg'
 
 def main():
     if not os.path.exists(IMAGE_PATH):
@@ -25,25 +25,25 @@ def main():
     
     # 3. 将图片映射到 [0, 100] x [0, 100] 的坐标系中
     # extent=[x_min, x_max, y_min, y_max] 强制图片拉伸/缩放到此范围
-    ax.imshow(img, extent=[0, 100, 0, 100], aspect='auto')
+    ax.imshow(img, extent=[0, 240, 0, 160], aspect='auto')
 
     # 4. 设置 100x100 的网格
     # 设置主刻度 (每 10 个单位一条粗线)
-    ax.set_xticks(np.arange(0, 101, 10))
-    ax.set_yticks(np.arange(0, 101, 10))
+    ax.set_xticks(np.arange(0, 241, 10))
+    ax.set_yticks(np.arange(0, 161, 10))
     # 设置次刻度 (每 1 个单位一条细线)
-    ax.set_xticks(np.arange(0, 101, 1), minor=True)
-    ax.set_yticks(np.arange(0, 101, 1), minor=True)
+    ax.set_xticks(np.arange(0, 241, 1), minor=True)
+    ax.set_yticks(np.arange(0, 161, 1), minor=True)
 
     # 绘制网格线
     ax.grid(which='major', color='white', linestyle='-', linewidth=1.2, alpha=0.8)
     ax.grid(which='minor', color='white', linestyle=':', linewidth=0.5, alpha=0.5)
 
-    ax.set_title("ZJU Haining Campus Map Coordinate Picker\n(Click anywhere to get coordinates)", fontsize=14, fontweight='bold')
-    ax.set_xlabel("X Coordinate (0-100)")
-    ax.set_ylabel("Y Coordinate (0-100)")
-    ax.set_xlim(0, 100)
-    ax.set_ylim(0, 100)
+    ax.set_title("ZJU Zijingang Campus Map Coordinate Picker\n(Click anywhere to get coordinates)", fontsize=14, fontweight='bold')
+    ax.set_xlabel("X Coordinate (0-240)")
+    ax.set_ylabel("Y Coordinate (0-160)")
+    ax.set_xlim(0, 240)
+    ax.set_ylim(0, 160)
 
     # 存储用户点击记录的列表
     clicked_points = []
