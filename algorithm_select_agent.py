@@ -46,106 +46,121 @@ class Algorithm_Select_Agent:
             complexity = "Low"
             print("   -> 环境危险评估: 【较低】。环境较为开阔。")
             
-        return complexity, num_targets
+        return complexity, num_targets, num_obstacles
+
+    def _get_target_algorithm(self):
+        """
+        【模块2】算法分配: 仅根据任务情景，决定派遣哪个算法兵种
+        返回: 算法简称, 算法类, 场景描述
+        """
+        if self.task_priority == 'speed':
+            return "PSO", PSOPlanner, "紧急医疗救援，需要最快收敛拉出直线"
+        elif self.task_priority == 'safety':
+            return "SSA", SSAPlanner, "台风灾后巡检，需要强全局探索能力避开死角"
+        elif self.task_priority == 'smoothness':
+            return "GWO", GWOPlanner, "夜间校园静默巡逻，不能有急转弯导致电机啸叫"
+        elif self.task_priority == 'global_optimal':
+            return "DSACO", DSACOPlanner, "校园复杂地形测绘，追求全局最短路"
+        elif self.task_priority == 'close_inspection':
+            return "WOA", WOAPlanner, "建筑物贴面缺陷检测，需近距离精细微调"
+        else:
+            return "PSO", PSOPlanner, "未知任务标签，执行默认兜底调度"
+
+    def _fine_tune_parameters(self, algo_name, complexity, num_targets, num_obstacles):
+        """
+        【模块3】参数微调专家: 独立封装的参数计算函数
+        按顺序：先设通用保底 -> 根据算法微调 -> 根据地图难度加算力
+        """
+        # 1. General 初始通用保底算力
+        base_pop = 50
+        base_iter = 100
+        base_waypoints = num_targets + 3 
+
+        # 2. 根据最终所选的算法，做第一轮性格微调
+        if algo_name == "PSO":
+            base_pop += 30; base_iter -= 30; base_waypoints -= 1 # 要快
+        elif algo_name == "SSA":
+            base_iter += 80; base_waypoints += 2 # 要稳
+        elif algo_name == "GWO":
+            base_pop += 20; base_iter += 50; base_waypoints += 4 # 要丝滑
+        elif algo_name == "DSACO":
+            base_pop = max(40, base_pop - 10); base_iter += 150 # 要深搜
+        elif algo_name == "WOA":
+            base_pop += 50; base_iter += 50; base_waypoints += 2 # 要包围
+
+        # 3. 核心：根据地图难度分类 (High/Medium) 进行算力二次扩容
+        if complexity == "High":
+            base_pop += int(num_obstacles * 1.5 + num_targets * 2)
+            base_iter += int(num_obstacles * 3 + num_targets * 5)
+            base_waypoints += 2
+        elif complexity == "Medium":
+            base_pop += int(num_obstacles * 1.0)
+            base_iter += int(num_obstacles * 1.5)
+            base_waypoints += 1
+
+        # 4. 兜底校验（保证不越过系统最低安全线）
+        final_pop = max(30, int(base_pop))
+        final_iter = max(50, int(base_iter))
+        final_waypoints = max(num_targets + 1, int(base_waypoints))
+
+        return final_pop, final_iter, final_waypoints
+
 
     def make_decision(self):
         """
-        核心二维决策树：情景(决定算法) + 环境(决定参数)
+        主控枢纽：依次调用分析、选型、微调，最后干净利落地返回算法实例
         """
-        complexity, num_targets = self.analyze_environment()
+        # 1. 获取地图难度
+        complexity, num_targets, num_obstacles = self.analyze_environment()
+        
+        # 2. 获取目标算法
+        algo_name, PlannerClass, scene_desc = self._get_target_algorithm()
         
         print("-" * 65)
-        print(f"[仿生优化智能体] 结合任务情景【{self.task_priority.upper()}】与环境特征【{complexity}】，开始调度...")
+        print(f"[仿生优化智能体] 场景感知: {scene_desc}")
+        print(f"   -> 首选算法: {algo_name}")
         
-        # ==========================================
-        # 1. 极速抢救情景 (Speed) -> 偏好 PSO
-        # ==========================================
-        if self.task_priority == 'speed':
-            print("   -> 场景感知: 紧急医疗救援，需要最快收敛拉出直线。")
-            print("   -> 首选算法: PSO (粒子群优化算法)")
-            if complexity == "High":
-                print("   -> 环境自适应调参: 障碍极度密集，传统 PSO 易撞墙。增加种群至 120，航点设为 10（保证灵活度又不至于拖慢速度）。")
-                return PSOPlanner(evaluator=self.evaluator, num_particles=120, num_waypoints=10, max_iter=200)
-            else:
-                print("   -> 环境自适应调参: 环境较为空旷。种群 80，航点 8，追求极致收敛速度。")
-                return PSOPlanner(evaluator=self.evaluator, num_particles=80, num_waypoints=8, max_iter=150)
+        # 3. 传入独立函数，计算最终算力
+        final_pop, final_iter, final_waypoints = self._fine_tune_parameters(
+            algo_name, complexity, num_targets, num_obstacles
+        )
+        
+        print(f"   -> 参数自适应微调: 结合环境难度[{complexity}]与算法特性，最终敲定:")
+        print(f"      \033[96m种群={final_pop}, 迭代={final_iter}, 控制点={final_waypoints}\033[0m")
+        
+        # 4. 统一打包实例化 (解决冗余代码)
+        kwargs = {
+            'evaluator': self.evaluator,
+            'num_waypoints': final_waypoints,
+            'max_iter': final_iter
+        }
+        
+        # 适配底层算法形参命名差异
+        if algo_name in ["ACO", "DSACO"]: kwargs['num_ants'] = final_pop
+        elif algo_name == "PSO": kwargs['num_particles'] = final_pop
+        elif algo_name == "GWO": kwargs['num_wolves'] = final_pop
+        elif algo_name == "SSA": kwargs['num_sparrows'] = final_pop
+        elif algo_name == "WOA": kwargs['pop_size'] = final_pop
 
-        # ==========================================
-        # 2. 台风灾后安全情景 (Safety) -> 偏好 SSA
-        # ==========================================
-        elif self.task_priority == 'safety':
-            print("   -> 场景感知: 台风灾后巡检，需要强全局探索能力避开死角。")
-            print("   -> 首选算法: SSA (麻雀搜索算法)")
-            if complexity == "High":
-                print("   -> 决策执行: 航点 12 个，种群扩大至 150 以增强算力。")
-                return SSAPlanner(evaluator=self.evaluator, num_sparrows=150, num_waypoints=12, max_iter=250)
-            else:
-                print("   -> 环境自适应调参: 障碍较少。种群 100，航点 10 即可安全覆盖。")
-                return SSAPlanner(evaluator=self.evaluator, num_sparrows=100, num_waypoints=10, max_iter=200)
+        return PlannerClass(**kwargs)
 
-        # ==========================================
-        # 3. 夜间静默情景 (Smoothness) -> 偏好 GWO
-        # ==========================================
-        elif self.task_priority == 'smoothness':
-            print("   -> 场景感知: 夜间校园静默巡逻，不能有急转弯导致电机啸叫。")
-            print("   -> 首选算法: GWO (灰狼优化算法)")
-            if complexity == "High":
-                print("   -> 环境自适应调参: 障碍密集，必须增加航点以保证绕弯圆润。种群 120，航点 14 个。")
-                return GWOPlanner(evaluator=self.evaluator, num_wolves=120, num_waypoints=14, max_iter=250)
-            else:
-                print("   -> 环境自适应调参: 常规平滑模式。种群 80，航点 10 个。")
-                return GWOPlanner(evaluator=self.evaluator, num_wolves=80, num_waypoints=10, max_iter=200)
-
-        # ==========================================
-        # 4. 全局最优测绘情景 (Global Optimal) -> 偏好 DSACO
-        # ==========================================
-        elif self.task_priority == 'global_optimal':
-            print("   -> 场景感知: 校园复杂地形测绘，追求全局最短路。")
-            print("   -> 首选算法: DSACO (蚁群优化算法)")
-            if complexity == "High":
-                print("   -> 环境自适应调参: 障碍极多，网格需要划分更细。蚂蚁数 60，分段数 11。")
-                return DSACOPlanner(evaluator=self.evaluator, num_ants=60, num_waypoints=11, max_iter=250)
-            else:
-                print("   -> 环境自适应调参: 常规网格划分。蚂蚁数 40，分段数 8。")
-                return DSACOPlanner(evaluator=self.evaluator, num_ants=40, num_waypoints=8, max_iter=200)
-
-        # ==========================================
-        # 5. 贴面精细检测情景 (Close Inspection) -> 偏好 WOA
-        # ==========================================
-        elif self.task_priority == 'close_inspection':
-            print("   -> 场景感知: 建筑物贴面缺陷检测，需近距离精细微调。")
-            print("   -> 首选算法: WOA (鲸鱼优化算法)")
-            if complexity == "High":
-                print("   -> 环境自适应调参: 缝隙狭窄，提升种群规模。种群 100，航点 12。")
-                return WOAPlanner(evaluator=self.evaluator, pop_size=100, num_waypoints=12, max_iter=250)
-            else:
-                return WOAPlanner(evaluator=self.evaluator, pop_size=60, num_waypoints=8, max_iter=200)
-                
-        else:
-            print("   -> 遇到未知任务标签，执行默认兜底调度: PSO 算法")
-            return PSOPlanner(evaluator=self.evaluator)
 
 # ==========================================
 # 完整系统运行流 
 # ==========================================
 if __name__ == "__main__":
-    # 1. 实例化统一地图与评价器
     shared_evaluator = PathEvaluator()
     
-    # 2. 模拟任务指令 (你可以修改为 'speed', 'safety', 'smoothness' 等测试)
+    # 模拟任务指令
     current_task = 'safety'
     
-    # 3. 实例化仿生优化智能体，传入评价器和当前情景
     agent = Algorithm_Select_Agent(evaluator=shared_evaluator, task_priority=current_task)
-    
-    # 4. 智能体提取环境信息，并分配配置好的算法实例
     active_planner = agent.make_decision()
     
     print("\n" + "=" * 65)
     print(f"智能体指派完毕，[{type(active_planner).__name__}] 开始执行底层寻优...")
     print("=" * 65)
     
-    # 5. 算法执行 (统一接口，返回路径和得分历史)
     best_path, score_history = active_planner.optimize()
     
     print("\n规划完成，正在生成最终的分析报告图表...")

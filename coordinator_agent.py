@@ -4,12 +4,13 @@ class CoordinatorAgent:
         self.algo_params = {'pop_size': 50, 'max_iter': 100}
         
         # 2. 评价器物理参数管理 (物理规则)
-        self.eval_params = {'chaikin_iterations': 3, 'min_waypoint_dist': 8.0, 'max_turn_angle': 135.0}
+        self.eval_params = {'chaikin_iterations': 3, 'min_waypoint_dist': 5.0}
 
         # 3. 核心监控指标
         self.meta_iteration = 0
         self.stuck_counter = 0
         self.last_score = float('inf')
+
 
     def analyze_and_act(self, total_score, details, env_info, current_algo):
         """
@@ -47,7 +48,7 @@ class CoordinatorAgent:
         ideal_dist = env_info.get('ideal_distance', 100.0)
         obs_count = env_info.get('obstacle_count', 0)
         
-        dynamic_tolerance = 1.15 + (obs_count * 0.005)
+        dynamic_tolerance = 1.0 + (obs_count * 0.005)
         max_allowed_dist = ideal_dist * dynamic_tolerance
         
         # 绕路诊断
