@@ -1,0 +1,59 @@
+{
+  "name": "ZJU Haining Campus",
+  "bounds": [100, 100],
+  "start_point": [43.0, 3.0],
+  "end_point": [43.0, 3.0],
+  "obstacles": [
+    // ==== 南侧建筑群 ====
+    {"type": "rect", "bottom_left": [29, 11], "width": 10, "height": 15},   // 1A-1E 
+    {"type": "rect", "bottom_left": [47, 11], "width": 10, "height": 15},   // 2A-2E 
+    {"type": "rect", "bottom_left": [30, 31], "width": 4, "height": 8},     // 3A,3B 
+    {"type": "rect", "bottom_left": [52, 31], "width": 5, "height": 10},    // 4 
+
+    {"type": "rect", "bottom_left": [36, 35], "width": 3, "height": 3},     // 7 
+    {"type": "rect", "bottom_left": [47, 35], "width": 3, "height": 3},     // 8 
+    {"type": "circle", "center": [37, 32], "radius": 1},                    // 5 
+    {"type": "circle", "center": [48, 32], "radius": 1},                    // 6 
+    {"type": "circle", "center": [43, 38], "radius": 2},                    // 9 
+
+        
+    // ==== 西侧教学楼 ====
+    {"type": "rect", "bottom_left": [13, 51], "width": 5, "height": 4},     // 25 
+    {"type": "rect", "bottom_left": [15, 40], "width": 9, "height": 5},     // 26 
+    {"type": "rect", "bottom_left": [20, 36], "width": 4, "height": 4},     // 26 
+    {"type": "rect", "bottom_left": [32, 60], "width": 4, "height": 6},     // 24 
+
+    // ==== 东侧教学楼、图书馆、食堂和书院 ====
+    {"type": "rect", "bottom_left": [51, 63], "width": 6, "height": 4},     // 21 
+    {"type": "rect", "bottom_left": [59, 64], "width": 5, "height": 4},     // 20 
+    {"type": "rect", "bottom_left": [61, 57], "width": 3, "height": 5},     // 19 
+    {"type": "circle", "center": [56, 59], "radius": 3},                    // 18
+
+    {"type": "rect", "bottom_left": [59, 44], "width": 5, "height": 7},     // 16
+
+    {"type": "rect", "bottom_left": [68, 58], "width": 7, "height": 10},    // 15
+    {"type": "rect", "bottom_left": [79, 58], "width": 7, "height": 10},    // 12
+    {"type": "rect", "bottom_left": [75, 42], "width": 10, "height": 12},   // 11
+    {"type": "rect", "bottom_left": [69, 29], "width": 12, "height": 10},   // 10
+
+    // ==== 北侧体育馆 ====
+    {"type": "rect", "bottom_left": [52, 74], "width": 6, "height": 13},    // 23
+    {"type": "rect", "bottom_left": [72, 86], "width": 3, "height": 3}      // 22
+  ],
+
+  "target_areas": [
+   // {"center": [28.0, 13.0], "radius": 2.0, "name": "P5"},
+   // {"center": [29.0, 28.0], "radius": 2.0, "name": "P6"},
+   // {"center": [29.0, 40.0], "radius": 2.0, "name": "P7"},
+    {"center": [17.0, 46.0], "radius": 2.0, "name": "P8"},
+    {"center": [54.0, 69.0], "radius": 2.0, "name": "P1"},
+    {"center": [60.0, 39.0], "radius": 2.0, "name": "P2"},
+  // {"center": [58.0, 25.0], "radius": 2.0, "name": "P3"},
+   // {"center": [58.0, 14.0], "radius": 2.0, "name": "P4"},
+    
+    {"center": [43.0, 54.0], "radius": 8.0, "name": "lake"},
+    {"center": [28.0, 63.0], "radius": 2.0, "name": "river"},
+
+    {"center": [63.0, 81.0], "radius": 3.0, "name": "playground"}
+  ]
+}
