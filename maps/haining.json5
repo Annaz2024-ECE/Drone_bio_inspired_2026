@@ -2,7 +2,7 @@
   "name": "ZJU Haining Campus",
   "bounds": [100, 100],
   "start_point": [43.0, 3.0],
-  "end_point": [43.0, 3.0],
+  "end_point": [51.0, 94.0],
   "obstacles": [
     // ==== 南侧建筑群 ====
     {"type": "rect", "bottom_left": [29, 11], "width": 10, "height": 15},   // 1A-1E 
