@@ -41,18 +41,18 @@
   ],
 
   "target_areas": [
-    {"center": [28.0, 13.0], "radius": 2.0, "name": "P5"},
-    {"center": [29.0, 28.0], "radius": 2.0, "name": "P6"},
-    {"center": [29.0, 40.0], "radius": 2.0, "name": "P7"},
-    {"center": [17.0, 46.0], "radius": 2.0, "name": "P8"},
-    {"center": [54.0, 69.0], "radius": 2.0, "name": "P1"},
-    {"center": [60.0, 39.0], "radius": 2.0, "name": "P2"},
-    {"center": [58.0, 25.0], "radius": 2.0, "name": "P3"},
-    {"center": [58.0, 14.0], "radius": 2.0, "name": "P4"},
+    {"center": [28.0, 13.0], "radius": 2.0, "name": "P5", "z_min": 4.0, "z_max": 8},
+    {"center": [29.0, 28.0], "radius": 2.0, "name": "P6", "z_min": 4.0, "z_max": 8},
+    {"center": [29.0, 40.0], "radius": 2.0, "name": "P7", "z_min": 4.0, "z_max": 8},
+    {"center": [17.0, 46.0], "radius": 2.0, "name": "P8", "z_min": 4.0, "z_max": 8},
+    {"center": [54.0, 69.0], "radius": 2.0, "name": "P1", "z_min": 4.0, "z_max": 8},
+    {"center": [60.0, 39.0], "radius": 2.0, "name": "P2", "z_min": 4.0, "z_max": 8},
+    {"center": [58.0, 25.0], "radius": 2.0, "name": "P3", "z_min": 4.0, "z_max": 8},
+    {"center": [58.0, 14.0], "radius": 2.0, "name": "P4", "z_min": 4.0, "z_max": 8},
     
-    {"center": [43.0, 54.0], "radius": 8.0, "name": "lake"},
-    {"center": [28.0, 63.0], "radius": 2.0, "name": "river"},
+    {"center": [43.0, 54.0], "radius": 8.0, "name": "lake", "z_min": 6.0, "z_max": 10},
+    {"center": [28.0, 63.0], "radius": 2.0, "name": "river", "z_min": 4.0, "z_max": 8},
 
-    {"center": [63.0, 81.0], "radius": 3.0, "name": "playground"}
+    {"center": [63.0, 81.0], "radius": 3.0, "name": "playground", "z_min": 5.0, "z_max": 9}
   ]
 }

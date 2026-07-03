@@ -4,6 +4,8 @@ import matplotlib.patches as patches
 import pyjson5
 import math
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from mpl_toolkits.mplot3d import art3d
+
 
 class UAVEnvironment3D:
     """升级版3D地图环境：读取JSON配置，提供3D碰撞检测与3D可视化"""
@@ -180,16 +182,38 @@ class UAVEnvironment3D:
                 ]
                 ax.add_collection3d(Poly3DCollection(faces, facecolors='#5c6bc0', linewidths=0.5, edgecolors='black', alpha=0.6))
             
-        # 绘制巡检目标区域 (画在地面 Z=0 的绿色虚线圆)
+        # 绘制巡检目标区域圆柱体（线框模式）
         for target in self.target_areas:
             t_center = target['center']
             t_r = target['radius']
+            z_min = target.get('z_min', 0)
+            z_max = target.get('z_max', 0)
+
+            # 创建圆柱侧面的网格
+            u = np.linspace(0, 2*np.pi, 30)
+            v = np.linspace(z_min, z_max, 10)
+            u, v = np.meshgrid(u, v)
+            X = t_center[0] + t_r * np.cos(u)
+            Y = t_center[1] + t_r * np.sin(u)
+            Z = v
+
+            # 绘制半透明侧面
+            ax.plot_surface(X, Y, Z, alpha=0.2, color='green', edgecolor='none')
+
+            # 绘制底面和顶面的半透明圆盘（可选）
             theta = np.linspace(0, 2*np.pi, 50)
-            x_line = t_center[0] + t_r * np.cos(theta)
-            y_line = t_center[1] + t_r * np.sin(theta)
-            z_line = np.zeros_like(x_line)
-            ax.plot(x_line, y_line, z_line, color='#43a047', linestyle='--', linewidth=2)
-            ax.text(t_center[0], t_center[1], 0, target['name'], color='#2e7d32', fontweight='bold')
+            x_circ = t_center[0] + t_r * np.cos(theta)
+            y_circ = t_center[1] + t_r * np.sin(theta)
+            # 底面
+            ax.plot(x_circ, y_circ, np.full_like(theta, z_min), 
+                    color='#43a047', linewidth=2, alpha=0.5)
+            # 顶面
+            ax.plot(x_circ, y_circ, np.full_like(theta, z_max), 
+                    color='#43a047', linewidth=2, alpha=0.5)
+
+            # 添加标签（中心高度）
+            ax.text(t_center[0], t_center[1], (z_min + z_max) / 2,
+                    target['name'], color='#2e7d32', fontweight='bold')
 
         # 绘制起点和终点 (放在 Z=0，也可以根据需要调整)
         ax.scatter(*self.start_point, color='#fbc02d', s=100, marker='*', label='Start Gate', edgecolors='black', zorder=5)
