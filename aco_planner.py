@@ -181,6 +181,6 @@ class ACOPlanner(BasePlanner):
 
 
 if __name__ == "__main__":
-    planner = ACOPlanner( num_waypoints=15)
+    planner = ACOPlanner( num_waypoints=20)
     best_path, history = planner.optimize()
     planner.plot_result(best_path, history, algo_name="ACO")
