@@ -65,7 +65,7 @@ if __name__ == "__main__":
     # 1. 实例化评价器（包含地图环境）
     evaluator = PathEvaluator()
     # 模拟任务指令 (你可以修改为 'speed', 'safety', 'smoothness' 等测试)
-    current_task = 'speed'
+    current_task = 'safety'
     
     # 2. 实例化三大智能体
     opt_agent = Algorithm_Select_Agent(evaluator=evaluator, task_priority=current_task)
@@ -107,7 +107,7 @@ if __name__ == "__main__":
         full_convergence_history.extend(history)
         
         # 【框图节点4】：路径评价智能体打分 (获取分数与明细)
-        total_score, details = evaluator.evaluate_pso_particle(best_path)
+        total_score, details, env_info = evaluator.evaluate_pso_particle(best_path)
         
         if total_score < global_best_score:
             global_best_score = total_score
@@ -115,7 +115,7 @@ if __name__ == "__main__":
 
         # 【框图节点5 & 6】：协调决策智能体介入分析并开药方
         current_algo_params, new_eval_params, current_specific_params, is_finished = \
-            coord_agent.analyze_and_act(global_best_score, details, current_algo_name)
+            coord_agent.analyze_and_act(global_best_score, details, env_info, current_algo_name)
             
         # 调整评价器物理规则 (比如增加 Chaikin 平滑次数)
         evaluator.params.update(new_eval_params)
