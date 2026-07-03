@@ -119,7 +119,7 @@ class UAVEnvironment3D:
         ax.set_title('ZJU Haining Campus - 3D UAV Environment', fontsize=14, fontweight='bold')
         ax.set_xlabel('X Coordinate')
         ax.set_ylabel('Y Coordinate')
-        ax.set_zlabel('Altitude (Z) / m')
+        ax.set_zlabel('Altitude (Z)')
 
         # 绘制障碍物 (3D 建筑物)
         for obs in self.obstacles:
@@ -149,7 +149,7 @@ class UAVEnvironment3D:
                 ax.plot_surface(x_cap, y_cap, np.full(x_cap.shape, z_min), color='#5c6bc0', alpha=0.6, edgecolor='none')
                 # 绘制顶面 (z = z_max)
                 ax.plot_surface(x_cap, y_cap, np.full(x_cap.shape, z_max), color='#5c6bc0', alpha=0.6, edgecolor='none')
-                
+
                 
             elif obs['type'] == 'rect':
                 # 绘制 3D 长方体 (处理了旋转)
