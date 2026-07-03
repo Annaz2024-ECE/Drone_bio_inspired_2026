@@ -234,12 +234,12 @@ if __name__ == "__main__":
     ax.plot([p_safe_1[0], p_safe_2[0], p_safe_3[0]], 
             [p_safe_1[1], p_safe_2[1], p_safe_3[1]], 
             [p_safe_1[2], p_safe_2[2], p_safe_3[2]], 
-            color='#4caf50', linestyle='-', linewidth=2.5, label='Safe Test Path (Alt: 30m)')
+            color='#4caf50', linestyle='-', linewidth=2.5, label='Safe Test Path (Alt: 30)')
             
     ax.plot([p_collide_1[0], p_collide_2[0], p_collide_3[0]], 
             [p_collide_1[1], p_collide_2[1], p_collide_3[1]], 
             [p_collide_1[2], p_collide_2[2], p_collide_3[2]], 
-            color='#f44336', linestyle='--', linewidth=2.5, label='Collision Path (Alt: 5m)')
+            color='#f44336', linestyle='--', linewidth=2.5, label='Collision Path (Alt: 5)')
             
     ax.legend(loc='upper right')
     plt.tight_layout()
