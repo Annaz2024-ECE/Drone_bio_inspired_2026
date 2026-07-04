@@ -12,7 +12,7 @@ from woa_planner import WOAPlanner
 
 def run_parameter_tuning_loop():
     print("=" * 60)
-    print(" 启动 [算法专属参数调优 agent]")
+    print(" 启动 [3D 空间算法专属参数调优 Agent]")
     print("=" * 60)
 
     evaluator = PathEvaluator()
@@ -31,10 +31,10 @@ def run_parameter_tuning_loop():
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "ACO"  # 比如今天你想测试一下 PSO 的专属调参
+    TARGET_ALGO = "GWO"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
     # ==========================================
     
-    print(f"  [系统加载] 正在实例化 {TARGET_ALGO} 算法...")
+    print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
     
     # ==========================================
@@ -42,7 +42,8 @@ def run_parameter_tuning_loop():
     # ==========================================
     kwargs = {
         'evaluator': evaluator,
-        'num_waypoints': 10,
+        # 【核心修正】：3D 地图有 11 个打卡点，控制点必须大于 11，这里设为 16！
+        'num_waypoints': 16, 
         'max_iter': agent.algo_params['max_iter']
     }
     
@@ -54,13 +55,13 @@ def run_parameter_tuning_loop():
     elif TARGET_ALGO == "SSA": kwargs['num_sparrows'] = pop_size
     elif TARGET_ALGO == "WOA": kwargs['pop_size'] = pop_size
 
-    # 带着正确的种群规模出生，底层矩阵直接完美生成 50x20！
+    # 带着正确的种群规模出生，底层 3D 矩阵直接完美生成！
     planner = PlannerClass(**kwargs)
     
     meta_rounds = 5  # 调参总轮数
     
     for round_idx in range(1, meta_rounds + 1):
-        print(f"\n>>>>>>>>>>>>  第 {round_idx} 轮调优测试 [{TARGET_ALGO}] >>>>>>>>>>>>")
+        print(f"\n>>>>>>>>>>>>  第 {round_idx} 轮 3D 调优测试 [{TARGET_ALGO}] >>>>>>>>>>>>")
         
         # 1. 跑当前参数下的算法
         best_path, history = planner.optimize()
@@ -68,9 +69,11 @@ def run_parameter_tuning_loop():
         # 2. 终极体检
         final_score, details, env_info = evaluator.evaluate_pso_particle(best_path)
         
-        print(f"\n [本轮结算] 得分: {final_score:,.2f}")
+        print(f"\n [本轮结算] 3D 最终得分: {final_score:,.2f}")
         for k, v in details.items():
-            if v > 0: print(f"    - {k}: {v:,.2f}")
+            if v > 0: 
+                color = "\033[91m" if v > 1000 else "\033[0m"
+                print(f"    - {k}: {color}{v:,.2f}\033[0m")
             
         # 3. 提交给老中医，获取更新后的三个字典，以及是否结束的信号
         if round_idx < meta_rounds:
@@ -79,7 +82,7 @@ def run_parameter_tuning_loop():
             
             # 接收到提前交卷信号，直接跳出循环
             if is_finished:
-                print(f"\n {TARGET_ALGO} 完毕调整！在第 {round_idx} 轮提前达成完美收敛。")
+                print(f"\n {TARGET_ALGO} 调参完毕！在第 {round_idx} 轮提前达成完美的 3D 空间收敛。")
                 break
                 
             # 【A】更新评价器参数
@@ -110,15 +113,15 @@ def run_parameter_tuning_loop():
     # ==========================================
     #  所有调参轮次彻底结束后，输出终极图表
     # ==========================================
-    print(f"\n 全部调优轮次结束！正在生成 {TARGET_ALGO} 的终极路线与连续收敛曲线图...")
-    planner.plot_result(best_path, history, algo_name=f"{TARGET_ALGO}_Final_Tuned")
+    print(f"\n 全部调优轮次结束！正在生成 {TARGET_ALGO} 的终极 3D 路线与连续收敛曲线图...")
+    planner.plot_result(best_path, history, algo_name=f"{TARGET_ALGO}_Final_3D_Tuned")
 
 if __name__ == "__main__":
-    print("\n 开始底层寻优，已开启防休眠模式...")
+    print("\n 开始底层 3D 寻优，已开启防休眠模式...")
     
     # 用 with 语句把整个主程序的大循环包起来
     with keep.running():
         # 注意这一行一定要有缩进！
         run_parameter_tuning_loop()
         
-    print("\n 规划全部完成，电脑恢复正常休眠策略。")
+    print("\n 3D 路径规划全部完成，电脑恢复正常休眠策略。")

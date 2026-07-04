@@ -2,7 +2,7 @@ import os
 os.environ['OPENBLAS_NUM_THREADS'] = '1'  # 限制底层数学计算引擎只用单线程，防止内存冲突
 import numpy as np
 import matplotlib.pyplot as plt
-from environment_buildup_3D import UAVEnvironment3D  # 【修改1：导入3D环境】
+from environment_buildup_3D import UAVEnvironment3D  
 import scipy.interpolate as spl
 
 class PathEvaluator:
@@ -16,27 +16,24 @@ class PathEvaluator:
             'missed_target': 1000000.0,     
             'sharp_turn': 10000.0,         
             'margin_violation': 5000.0,     
-            'altitude_violation': 50000.0   # 飞入地下或飞得太高的惩罚
+            'altitude_violation': 50000.0,
+            'boundary_violation': 50000.0  
         }
 
         self.params = {
-            'max_turn_angle': 120.0,     # 3D转弯更复杂，放宽到120度
-            'chaikin_iterations': 3,     
+            'max_turn_angle': 120.0,     
+            'bspline_num_points': 100,   # B-Spline 参数
             'min_waypoint_dist': 5.0,    
-            'margin_layers': [0.5, 0.2]  # 只留两层安全洋葱皮，减少擦边误伤
+            'margin_layers': [0.5, 0.2]  
         }
         
         self.ideal_min_distance = self._calculate_ideal_min_distance()
         print(f" [环境加载] 当前3D地图理论最短直线距离: {self.ideal_min_distance:.1f} 米")
 
     def _calculate_ideal_min_distance(self):
-        """ 计算 起点 -> 所有打卡点 -> 终点 的直线距离 (Numpy 向量运算自动适应3D!) """
         pts = [self.env.start_point]
-        
-        # 提取所有打卡点
         targets = [t['center'] for t in self.env.target_areas]
         
-        # 为了算距离，如果目标点只有2D，给它补个 Z=0
         for i in range(len(targets)):
             if len(targets[i]) == 2:
                 targets[i] = np.array([targets[i][0], targets[i][1], 0.0])
@@ -54,22 +51,6 @@ class PathEvaluator:
         if new_penalties: self.penalties.update(new_penalties)
         if new_params: self.params.update(new_params)
 
-    # def generate_chaikin_path(self, waypoints, iterations=4):
-    #     """ Chaikin 割角算法：完美兼容3D坐标！ """
-    #     pts = np.array(waypoints)
-    #     for _ in range(iterations):
-    #         new_pts = [pts[0]] 
-    #         for i in range(len(pts) - 1):
-    #             p0 = pts[i]
-    #             p1 = pts[i+1]
-    #             Q = 0.75 * p0 + 0.25 * p1
-    #             R = 0.25 * p0 + 0.75 * p1
-    #             new_pts.extend([Q, R])
-    #         new_pts.append(pts[-1]) 
-    #         pts = np.array(new_pts)
-    #     return pts
-
-    
     def generate_bspline_path(self, waypoints, num_points=100):
         """ 
         【全面升级为 3D B-Spline 插值算法】 
@@ -77,35 +58,30 @@ class PathEvaluator:
         """
         waypoints = np.array(waypoints)
         
-        # 1. 剔除极其接近的重复点，防止插值算法除以0报错
         unique_waypoints = [waypoints[0]]
         for pt in waypoints[1:]:
             if np.linalg.norm(pt - unique_waypoints[-1]) > 0.1:
                 unique_waypoints.append(pt)
         unique_waypoints = np.array(unique_waypoints)
 
-        # 2. 检查点数。B样条默认需要至少 4 个点 (阶数 k=3)
         num_wp = len(unique_waypoints)
         if num_wp < 3:
-            return unique_waypoints # 点太少，画不出平滑曲线，直接返回原线
+            return unique_waypoints 
             
         k = 3 if num_wp >= 4 else num_wp - 1
 
-        # 3. 提取 3D 空间的 X, Y, Z
         x = unique_waypoints[:, 0]
         y = unique_waypoints[:, 1]
         z = unique_waypoints[:, 2]
 
-        # 4. 计算 B样条参数 
-        # s=0 表示强制曲线精确穿过你给定的每一个控制点
         tck, u = spl.splprep([x, y, z], s=0, k=k)
 
-        # 5. 生成均匀分布的新参数，并计算出平滑的三维坐标点
         u_new = np.linspace(0, 1.0, num_points)
         x_new, y_new, z_new = spl.splev(u_new, tck)
 
-        # 6. 把 X, Y, Z 重新拼成 3D 坐标组
         smooth_path = np.column_stack((x_new, y_new, z_new))
+
+        smooth_path[:, 2] = np.clip(smooth_path[:, 2], 0.1, None)
         return smooth_path
 
     def calculate_spacing_penalty(self, raw_waypoints):
@@ -124,7 +100,6 @@ class PathEvaluator:
         return total_length
 
     def calculate_turn_angle(self, p1, p2, p3):
-        """ 计算 3D 空间转弯角度 (向量点乘魔法，完美适应3D) """
         v1 = p2 - p1
         v2 = p3 - p2
         norm_v1 = np.linalg.norm(v1)
@@ -149,7 +124,6 @@ class PathEvaluator:
         for target in self.env.target_areas:
             center_2d = target['center'][:2] 
             radius = target['radius']
-            # 读取新的 Z 轴边界，如果没有提供则默认为贴地到 20m
             z_min = target.get('z_min', 0.0)
             z_max = target.get('z_max', 20.0) 
             
@@ -159,19 +133,16 @@ class PathEvaluator:
                 p1 = path_points[i]
                 p2 = path_points[i+1]
                 
-                # 【3D 离散采样法】：把每一段航线切分成 1米一个的点，检测这些点离目标的距离
                 dist_3d = self.env.calculate_distance(p1, p2)
-                num_steps = max(2, int(dist_3d / 1.0)) # 步长为 1 米
+                num_steps = max(2, int(dist_3d / 1.0)) 
                 
                 for step_i in range(num_steps + 1):
                     t = step_i / num_steps
-                    pt = p1 + t * (p2 - p1) # 航线上的 3D 采样点
+                    pt = p1 + t * (p2 - p1) 
                     
-                    # 1. 计算 XY 平面上的漏打卡距离
                     dist_xy = np.linalg.norm(pt[:2] - center_2d)
                     missed_xy = max(0.0, dist_xy - radius)
                     
-                    # 2. 计算 Z 轴上的漏打卡距离 (如果在这个高度区间内，则 Z 轴距离为 0)
                     if pt[2] < z_min:
                         missed_z = z_min - pt[2]
                     elif pt[2] > z_max:
@@ -179,15 +150,12 @@ class PathEvaluator:
                     else:
                         missed_z = 0.0
                         
-                    # 3. 勾股定理合成真实的 3D 空间漏打卡误差
                     total_missed = np.sqrt(missed_xy**2 + missed_z**2)
                     
                     if total_missed < min_missed_dist:
                         min_missed_dist = total_missed
             
-            # 如果整条航线离该目标最近的一点仍然在目标外（min_missed_dist > 0）
-            if min_missed_dist > 0.1: # 留 0.1 米的浮点数容差
-                # 依然是基础大额惩罚 + 距离正相关惩罚
+            if min_missed_dist > 0.1: 
                 total_target_penalty += 500000.0 + (min_missed_dist * 20000.0)
                 
         return total_target_penalty
@@ -200,25 +168,44 @@ class PathEvaluator:
             'smoothness': 0.0,        
             'sharp_turn': 0.0,        
             'missed_target': 0.0,
-            'altitude_violation': 0.0  # 新增高度惩罚
+            'altitude_violation': 0.0,
+            'boundary_violation': 0.0,
+            'gravity_cost': 0.0
         }
 
         # 1. 距离算分
         details['distance'] = self.calculate_path_length(path_points)
         
+        # 【修复】：清理了重复定义的冗余代码
         margin_layers = self.params.get('margin_layers', [0.5, 0.2])
         layer_penalty = self.penalties.get('margin_violation', 5000.0) / len(margin_layers)
-        fatal_penalty = self.penalties.get('fatal_collision', 1000000.0)
+        bound_penalty = self.penalties.get('boundary_violation', 50000.0)
         alt_penalty = self.penalties.get('altitude_violation', 50000.0)
+        fatal_penalty = self.penalties.get('fatal_collision', 1000000.0)
 
-        # 2. 高空管制 与 碰撞检测
+        # 2. 空域与四周边界管制检测
         for i in range(len(path_points)):
-            # 钻地 (撞向地面)
-            if path_points[i][2] < 0:
+            pt = path_points[i]
+            
+            # 2.1 垂直空域管制（钻地或冲天）
+            if pt[2] < 0:
                 details['fatal_collision'] += fatal_penalty
-            # 突破天际 (超过环境最高限制)
-            elif path_points[i][2] > self.env.z_bounds[1]:
+            elif pt[2] > self.env.z_bounds[1]:
                 details['altitude_violation'] += alt_penalty
+                
+            # 2.2 X 轴水平越界检测
+            if pt[0] < self.env.x_bounds[0] or pt[0] > self.env.x_bounds[1]:
+                details['boundary_violation'] += bound_penalty
+                
+            # 2.3 Y 轴水平越界检测
+            if pt[1] < self.env.y_bounds[0] or pt[1] > self.env.y_bounds[1]:
+                details['boundary_violation'] += bound_penalty
+            
+            # 重力能耗惩罚 (飞行高度越高，耗电越多)
+            # 假设无人机每升高 1 米，每个控制点增加 15 分的惩罚
+            # 这就形成了一个向下拉扯的“引力场”，防止无人机无脑拔高
+            if pt[2] > 0:
+                details['gravity_cost'] += pt[2] * 15.0
 
         for i in range(len(path_points) - 1):
             p1 = path_points[i]
@@ -235,18 +222,18 @@ class PathEvaluator:
                 if self.env.is_segment_collision(p1, p2, safe_margin=m):
                     details['margin_violation'] += layer_penalty
 
-        # 3. 急转弯计算 (无需修改)
+        # 3. 急转弯计算
         max_turn = self.params.get('max_turn_angle', 120.0)
         sharp_turn_pen = self.penalties.get('sharp_turn', 10000.0)
 
         for i in range(len(path_points) - 2):
             angle = self.calculate_turn_angle(path_points[i], path_points[i+1], path_points[i+2])
-            if angle > 10.0: # 3D死区放大到10度
+            if angle > 10.0: 
                 details['smoothness'] += ((angle - 10.0) ** 2) * 0.2
             if angle > max_turn:
                 details['sharp_turn'] += sharp_turn_pen
 
-        # 4. 2D投影打卡检测
+        # 4. 【修复注释】：3D 悬空圆柱打卡检测
         details['missed_target'] += self.calculate_target_penalty(path_points)
 
         env_info = {
@@ -267,8 +254,9 @@ class PathEvaluator:
             total_score = sum(raw_details.values())
             return total_score, raw_details, env_info
             
-        iters = self.params.get('chaikin_iterations', 3)
-        smooth_path = self.generate_bspline_path(raw_waypoints, iterations=iters)
+        # 【修复】：改为获取 bspline_num_points，并正确传给 generate_bspline_path
+        num_pts = self.params.get('bspline_num_points', 100)
+        smooth_path = self.generate_bspline_path(raw_waypoints, num_points=num_pts)
         
         base_score, smooth_details, _ = self.calculate_fitness(smooth_path)
         smooth_details['spacing_penalty'] = spacing_penalty
@@ -282,12 +270,8 @@ class PathEvaluator:
 if __name__ == "__main__":
     evaluator = PathEvaluator()
     
-    # 【全面更新为3D测试路径】
-    # 高空安全飞跃
     path_3d_safe = np.array([[43.0, 3.0, 30.0], [43.0, 50.0, 30.0], [51.0, 94.0, 30.0]])
-    # 低空穿模撞大楼
     path_3d_crash = np.array([[43.0, 3.0, 5.0], [43.0, 50.0, 5.0], [51.0, 94.0, 5.0]])
-    # 钻入地下
     path_3d_underground = np.array([[43.0, 3.0, 30.0], [43.0, 50.0, -5.0], [51.0, 94.0, 30.0]])
 
     test_cases = [
@@ -316,28 +300,17 @@ if __name__ == "__main__":
                 print(f"       - {k}: {color}{v:,.2f}\033[0m")
         print("-" * 50)
 
-    # ==========================================
-    # 【新增：3D 可视化绘图代码】
-    # ==========================================
-    # 我们拿第一条安全的完美路线来画图展示
     path_to_draw = path_3d_safe 
-    
-    # 【修复】：把这里传入的参数改为 num_points=100 以适配 B-Spline
     smooth_path_to_draw = evaluator.generate_bspline_path(path_to_draw, num_points=100)
     
     fig = plt.figure(figsize=(12, 10))
-    # 必须声明 projection='3d'，告诉 matplotlib 这是一个 3D 画布
     ax = fig.add_subplot(111, projection='3d') 
     
-    # 1. 把 3D 建筑物和目标圈画出来
     evaluator.env.draw_environment_3d(ax)
     
-    # 2. 画原始稀疏航点 (虚线带叉叉)
-    # 注意这里传入了三个切片: [:, 0]是X, [:, 1]是Y, [:, 2]是Z
     ax.plot(path_to_draw[:, 0], path_to_draw[:, 1], path_to_draw[:, 2], 
             color='gray', linestyle='--', linewidth=2, marker='x', markersize=8, label='Original Waypoints')
             
-    # 3. 画经过 B-Spline 平滑后的 3D 飞行曲线 (粉红色实线)
     ax.plot(smooth_path_to_draw[:, 0], smooth_path_to_draw[:, 1], smooth_path_to_draw[:, 2], 
             color='#FF007F', linestyle='-', linewidth=3, label='B-Spline Smooth Path')
             
