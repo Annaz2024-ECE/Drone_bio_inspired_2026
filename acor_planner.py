@@ -105,7 +105,7 @@ class ACOPlanner(BasePlanner):
             self.convergence_curve.append(self.global_best_fitness)
             
             # 打印进度
-            if (idx + 1) % 10 == 0 or idx == 0:
+            if (idx + 1) % 50 == 0 or idx == 0:
                 print(f"  > 迭代 {idx+1:03d}/{self.max_iter} | 全局最优得分: {self.global_best_fitness:,.2f}")
                 
         print("优化完成！")
@@ -121,14 +121,14 @@ if __name__ == "__main__":
     # 实例化 ACOR，设定需要 15 个中间自由航点
     planner = ACOPlanner(
         evaluator=evaluator, 
-        num_waypoints=15,   
-        max_iter=300,        
+        num_waypoints=20,   
+        max_iter=10,        
         archive_size=50,     
         num_ants=50,        
-        q=0.1,           
+        q=0.05,           
         xi=0.85                  )
     
     best_path, history = planner.optimize()
     
     # 可视化结果
-    planner.plot_result(best_path, history, algo_name="ACO")
+    planner.plot_result(best_path, history, algo_name="ACOR")
