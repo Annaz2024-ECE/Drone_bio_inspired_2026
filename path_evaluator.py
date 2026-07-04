@@ -81,7 +81,13 @@ class PathEvaluator:
 
         smooth_path = np.column_stack((x_new, y_new, z_new))
 
-        smooth_path[:, 2] = np.clip(smooth_path[:, 2], 0.1, None)
+        # 任何平滑过冲导致的负数高度，全部托底到 0.1 米（贴地皮）
+        smooth_path[:, 2] = np.clip(smooth_path[:, 2], 0.1, self.env.z_bounds[1]) # 顺便顺手把天花板也卡死
+        
+        # X 和 Y 轴的绝对硬裁剪，利用环境里的 bounds，确保平滑轨迹也绝不出界
+        smooth_path[:, 0] = np.clip(smooth_path[:, 0], self.env.x_bounds[0], self.env.x_bounds[1])
+        smooth_path[:, 1] = np.clip(smooth_path[:, 1], self.env.y_bounds[0], self.env.y_bounds[1])
+        
         return smooth_path
 
     def calculate_spacing_penalty(self, raw_waypoints):
@@ -249,12 +255,17 @@ class PathEvaluator:
         raw_score, raw_details, env_info = self.calculate_fitness(raw_waypoints)
         
         # 提前拦截
-        if raw_details['fatal_collision'] > 0 or raw_details['missed_target'] > 0 or raw_details['altitude_violation'] > 0:
+        # 只要粗筛时控制点本身出界了，立刻判死刑，不给它进入下一步画曲线的机会！
+        if (raw_details['fatal_collision'] > 0 or 
+            raw_details['missed_target'] > 0 or 
+            raw_details['altitude_violation'] > 0 or 
+            raw_details['boundary_violation'] > 0):
+            
             raw_details['spacing_penalty'] = spacing_penalty
             total_score = sum(raw_details.values())
             return total_score, raw_details, env_info
             
-        # 【修复】：改为获取 bspline_num_points，并正确传给 generate_bspline_path
+        # 改为获取 bspline_num_points，并正确传给 generate_bspline_path
         num_pts = self.params.get('bspline_num_points', 100)
         smooth_path = self.generate_bspline_path(raw_waypoints, num_points=num_pts)
         

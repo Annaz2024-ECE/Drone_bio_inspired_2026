@@ -4,7 +4,7 @@ class CoordinatorAgent:
         self.algo_params = {'pop_size': 50, 'max_iter': 100}
         
         # 2. 评价器物理参数管理 (物理规则)
-        # 【修改1】：将过时的 chaikin 移除，替换为 B-Spline 采样点数
+        # 将过时的 chaikin 移除，替换为 B-Spline 采样点数
         self.eval_params = {'bspline_num_points': 100, 'min_waypoint_dist': 5.0}
 
         # 3. 核心监控指标
