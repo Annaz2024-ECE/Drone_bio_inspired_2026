@@ -6,7 +6,7 @@ from path_evaluator import PathEvaluator
 class BasePlanner:
     def __init__(self, num_waypoints=10, max_iter=200, evaluator=None):
         """
-        所有路径规划算法的通用基类
+        所有路径规划算法的通用基类 (3D升级版)
         :param num_waypoints: 中间控制点数量
         :param max_iter: 最大迭代次数
         :param evaluator: 路径评价器
@@ -18,11 +18,14 @@ class BasePlanner:
         # 2. 统一管理基础参数
         self.num_waypoints = num_waypoints
         self.max_iter = max_iter
-        self.dim = self.num_waypoints * 2  # 搜索维度 (X和Y)
         
-        # 3. 统一管理边界
-        self.lb = min(self.env.x_bounds[0], self.env.y_bounds[0])
-        self.ub = max(self.env.x_bounds[1], self.env.y_bounds[1])
+        # 【修改1：搜索维度从 2 升级到 3 (X, Y, Z)】
+        self.dim = self.num_waypoints * 3  
+        
+        # 【修改2：精确的 3D 边界控制，防止高度越界】
+        # 生成形如 [x_min, y_min, z_min, x_min, y_min, z_min...] 的边界数组，与狼群基因链严格对应
+        self.lb = np.tile([self.env.x_bounds[0], self.env.y_bounds[0], self.env.z_bounds[0]], self.num_waypoints)
+        self.ub = np.tile([self.env.x_bounds[1], self.env.y_bounds[1], self.env.z_bounds[1]], self.num_waypoints)
         
         # 4. 统一的数据记录容器
         self.historical_best_pos = np.zeros(self.dim)
@@ -31,9 +34,10 @@ class BasePlanner:
 
     def _decode_path(self, position):
         """
-        [通用方法] 将一维的位置向量还原为包含起终点的完整二维路径
+        [通用方法] 将一维的位置向量还原为包含起终点的完整 3D 路径
         """
-        waypoints = position.reshape((self.num_waypoints, 2))
+        # 【修改3：还原为 3 维矩阵 (X, Y, Z)】
+        waypoints = position.reshape((self.num_waypoints, 3))
         full_path = np.vstack([self.env.start_point, waypoints, self.env.end_point])
         return full_path
 
@@ -45,21 +49,26 @@ class BasePlanner:
 
     def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None):
         """ 
-        [通用方法] 统一的绘制结果函数：左图为地图路径，右图为收敛曲线 
+        [通用方法] 统一的绘制结果函数：左图为 3D 地图路径，右图为收敛曲线 
         """
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
+        # 【修改4：引入 3D 画布】
+        fig = plt.figure(figsize=(16, 8))
+        ax1 = fig.add_subplot(121, projection='3d') # 左图变 3D
+        ax2 = fig.add_subplot(122)                  # 右图保持 2D 收敛曲线
         
-        # 1. 绘制地图和原始控制点路径
-        self.env.draw_environment(ax=ax1)
+        # 1. 绘制 3D 地图环境
+        self.env.draw_environment_3d(ax=ax1)
         
-        # 生成 Chaikin 平滑后的飞行曲线
-        smooth_path = self.evaluator.generate_chaikin_path(best_path, iterations=3)
+        # 【修改5：替换为全新的 B-Spline 平滑算法】
+        smooth_path = self.evaluator.generate_bspline_path(best_path, num_points=100)
         
-        # 红色实线表示 smooth 路径 (置于顶层)
-        ax1.plot(smooth_path[:, 0], smooth_path[:, 1], color='#e65100', linewidth=3, label=f'{algo_name} Smooth Path', zorder=6)
+        # 红色实线表示 smooth 路径 (3D 绘图)
+        ax1.plot(smooth_path[:, 0], smooth_path[:, 1], smooth_path[:, 2], 
+                 color='#e65100', linewidth=3, label=f'{algo_name} Smooth Path', zorder=6)
         
-        # 灰色虚线表示 raw 路径 (置于底层)
-        ax1.plot(best_path[:, 0], best_path[:, 1], color='gray', linewidth=1, linestyle='--',
+        # 灰色虚线表示 raw 路径 (3D 绘图)
+        ax1.plot(best_path[:, 0], best_path[:, 1], best_path[:, 2], 
+                 color='gray', linewidth=1, linestyle='--',
                  marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)
                  
         ax1.legend(loc='upper left', fontsize=10)
@@ -96,14 +105,13 @@ class BasePlanner:
                  bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
         
         # ==========================================
-        # 【新增】得分明细提取模块 (左下角)
+        # 得分明细提取模块 (左下角)
         # ==========================================
-        # 拿算法跑出来的最终路径，去评价器里再测一次，拿到体检报告 (details)
         _, details, _ = self.evaluator.evaluate_pso_particle(best_path)
         
         details_list = []
         for k, v in details.items():
-            if v > 0:  # 只显示有扣分的项目，界面更清爽
+            if v > 0:
                 details_list.append(f"  {k}: {v:,.0f}")
                 
         if not details_list:
@@ -111,7 +119,6 @@ class BasePlanner:
             
         details_text = "Fitness Breakdown:\n" + "\n".join(details_list)
         
-        # 绘制在收敛曲线的右上方 (Best Score 红色框的下方)，避免挡住底部的收敛曲线
         ax2.text(0.95, 0.88, details_text,
                  transform=ax2.transAxes, fontsize=10,
                  verticalalignment='top', horizontalalignment='right',
@@ -128,7 +135,6 @@ class BasePlanner:
         
         plt.tight_layout()
         
-        # 支持批量自动命名保存
         if save_dir is not None:
             os.makedirs(save_dir, exist_ok=True)
             filename = f"{algo_name}_run_{run_idx:02d}.png" if run_idx else f"{algo_name}_result.png"

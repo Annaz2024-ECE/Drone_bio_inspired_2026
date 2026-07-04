@@ -2,7 +2,7 @@ import os
 os.environ['OPENBLAS_NUM_THREADS'] = '1'  # 限制底层数学计算引擎只用单线程，防止内存冲突
 import numpy as np
 import matplotlib.pyplot as plt
-from environment_buildup import UAVEnvironment3D  # 【修改1：导入3D环境】
+from environment_buildup_3D import UAVEnvironment3D  # 【修改1：导入3D环境】
 import scipy.interpolate as spl
 
 class PathEvaluator:
@@ -147,25 +147,48 @@ class PathEvaluator:
         total_target_penalty = 0.0
         
         for target in self.env.target_areas:
-            # 强制把目标点的中心只取 X 和 Y (抛弃 Z 高度)
             center_2d = target['center'][:2] 
             radius = target['radius']
-            min_dist_to_target = float('inf')
+            # 读取新的 Z 轴边界，如果没有提供则默认为贴地到 20m
+            z_min = target.get('z_min', 0.0)
+            z_max = target.get('z_max', 20.0) 
+            
+            min_missed_dist = float('inf')
             
             for i in range(len(path_points) - 1):
-                # 将航线线段也强行“踩扁”到 2D 平面
-                p1_2d = path_points[i][:2]
-                p2_2d = path_points[i+1][:2]
+                p1 = path_points[i]
+                p2 = path_points[i+1]
                 
-                # 计算 2D 投影距离 (只要飞过正上方就算打卡！)
-                dist = self.point_to_segment_distance(center_2d, p1_2d, p2_2d)
-                if dist < min_dist_to_target:
-                    min_dist_to_target = dist
+                # 【3D 离散采样法】：把每一段航线切分成 1米一个的点，检测这些点离目标的距离
+                dist_3d = self.env.calculate_distance(p1, p2)
+                num_steps = max(2, int(dist_3d / 1.0)) # 步长为 1 米
+                
+                for step_i in range(num_steps + 1):
+                    t = step_i / num_steps
+                    pt = p1 + t * (p2 - p1) # 航线上的 3D 采样点
+                    
+                    # 1. 计算 XY 平面上的漏打卡距离
+                    dist_xy = np.linalg.norm(pt[:2] - center_2d)
+                    missed_xy = max(0.0, dist_xy - radius)
+                    
+                    # 2. 计算 Z 轴上的漏打卡距离 (如果在这个高度区间内，则 Z 轴距离为 0)
+                    if pt[2] < z_min:
+                        missed_z = z_min - pt[2]
+                    elif pt[2] > z_max:
+                        missed_z = pt[2] - z_max
+                    else:
+                        missed_z = 0.0
+                        
+                    # 3. 勾股定理合成真实的 3D 空间漏打卡误差
+                    total_missed = np.sqrt(missed_xy**2 + missed_z**2)
+                    
+                    if total_missed < min_missed_dist:
+                        min_missed_dist = total_missed
             
-            if min_dist_to_target > radius:
-                missed_distance = min_dist_to_target - radius
-                # 方便3D算法探索
-                total_target_penalty += 500000.0 + (missed_distance * 20000.0)
+            # 如果整条航线离该目标最近的一点仍然在目标外（min_missed_dist > 0）
+            if min_missed_dist > 0.1: # 留 0.1 米的浮点数容差
+                # 依然是基础大额惩罚 + 距离正相关惩罚
+                total_target_penalty += 500000.0 + (min_missed_dist * 20000.0)
                 
         return total_target_penalty
 

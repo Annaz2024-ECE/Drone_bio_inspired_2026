@@ -22,29 +22,38 @@ class GWOPlanner(BasePlanner):
         self.positions = self._initialize_wolves()
 
     def _initialize_wolves(self):
-        """ 闭环专属初始化：雷达排序 + 目标注入 """
+        """ 闭环专属初始化：雷达排序 + 3D目标注入 """
         positions = np.zeros((self.num_wolves, self.dim))
-        targets = [t['center'] for t in self.env.target_areas]
+        
+        # 【修改1：提取 3D 目标点 (取圆柱体的中心高度)】
+        targets_3d = []
+        for t in self.env.target_areas:
+            z_mid = (t.get('z_min', 0.0) + t.get('z_max', 20.0)) / 2.0
+            targets_3d.append(np.array([t['center'][0], t['center'][1], z_mid]))
         
         center_x = (self.env.x_bounds[0] + self.env.x_bounds[1]) / 2.0
         center_y = (self.env.y_bounds[0] + self.env.y_bounds[1]) / 2.0
-        # 确保目标点本身也是顺着圆圈转的
-        targets.sort(key=lambda p: np.arctan2(p[1] - center_y, p[0] - center_x))
+        
+        # 雷达排序依旧可以只看 XY 平面的极坐标投影
+        targets_3d.sort(key=lambda p: np.arctan2(p[1] - center_y, p[0] - center_x))
 
         for i in range(self.num_wolves):
-            # 1. 先生成基础的随机点
+            # 【修改2：加入 Z 轴的随机初始化】
             rand_x = np.random.uniform(self.env.x_bounds[0] + 5, self.env.x_bounds[1] - 5, self.num_waypoints)
             rand_y = np.random.uniform(self.env.y_bounds[0] + 5, self.env.y_bounds[1] - 5, self.num_waypoints)
-            raw_pts = np.column_stack((rand_x, rand_y))
+            # Z 轴不要贴地，稍微飞高点
+            rand_z = np.random.uniform(self.env.z_bounds[0] + 2, self.env.z_bounds[1] - 2, self.num_waypoints)
+            
+            # 拼装成 3D 点云
+            raw_pts = np.column_stack((rand_x, rand_y, rand_z))
 
-            # 2. 给前 30% 的精英狼注入打卡点
+            # 给前 30% 的精英狼注入 3D 打卡点
             if i < int(self.num_wolves * 0.3):
-                for j, tgt in enumerate(targets):
+                for j, tgt in enumerate(targets_3d):
                     if j < self.num_waypoints:
                         raw_pts[j] = tgt
 
-            # 3. 【核心】对这条狼所有的点（目标点+随机点）进行极坐标雷达排序！
-            # 这一步彻底消灭意大利面式的交叉打结！
+            # 对这条狼所有的点进行 XY 极坐标雷达排序
             angles = np.arctan2(raw_pts[:, 1] - center_y, raw_pts[:, 0] - center_x)
             sorted_pts = raw_pts[np.argsort(angles)]
             
