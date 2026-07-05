@@ -22,7 +22,6 @@ class UAVEnvironment3D:
         for obs in data['obstacles']:
             max_z = max(max_z, obs.get('z_max', 11.0))
         self.z_bounds = [0, max_z + 1] # 天花板留出 10m 余量
-        print(f"max_z = {self.z_bounds[1]}")
 
         # 起点和终点：如果 JSON 中只有二维，默认 Z=0，建议后续传入 [x, y, z]
         def to_3d(point):
