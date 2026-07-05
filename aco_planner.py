@@ -3,8 +3,8 @@ import random
 from base_planner import BasePlanner
 
 class ACOPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_ants=40, max_iter=200, num_waypoints=9,
-                 alpha=1.0, beta=3.0, rho=0.2, Q=40):
+    def __init__(self, evaluator=None, num_ants=40, max_iter=200, num_waypoints=20,
+                 alpha=1.0, beta=3.0, rho=0.2, Q=100):
         """ 继承自 BasePlanner 的 3D ACO 算法 (Y轴推进，X-Z平面寻优) """
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         self.num_ants = num_ants
@@ -61,7 +61,7 @@ class ACOPlanner(BasePlanner):
             self.convergence_curve.append(self.global_best_fitness)
             self._update_pheromones(all_paths, all_fitness)
             
-            if (idx + 1) % 10 == 0 or idx == 0:
+            if (idx + 1) % 50 == 0 or idx == 0:
                 print(f"  > 迭代 {idx+1:03d}/{self.max_iter} | 全局最优得分: {self.global_best_fitness:,.2f}")
                 
         return self.global_best_path, self.convergence_curve
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     
     evaluator = PathEvaluator()
     # 因为有 200 个候选点，蚂蚁数稍微增加有助于初期探索
-    planner = ACOPlanner(evaluator=evaluator, num_waypoints=10, num_ants=40, max_iter=20)
+    planner = ACOPlanner(evaluator=evaluator, num_waypoints=20, num_ants=60, max_iter=200)
     best_path, history = planner.optimize()
     
     # 调用通用的 3D 绘图接口

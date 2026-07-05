@@ -3,7 +3,7 @@ from path_evaluator import PathEvaluator
 from coordinator_agent import CoordinatorAgent
 
 # 1. 导入你手上所有的仿生智能体兵器库！
-from acor_planner import ACOPlanner
+from aco_planner import ACOPlanner
 from dsaco_planner import DSACOPlanner
 from pso_planner import PSOPlanner
 from gwo_planner import GWOPlanner
@@ -31,7 +31,7 @@ def run_parameter_tuning_loop():
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "GWO"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
+    TARGET_ALGO = "ACO"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
     # ==========================================
     
     print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")

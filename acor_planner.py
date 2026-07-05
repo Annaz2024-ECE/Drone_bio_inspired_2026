@@ -122,7 +122,7 @@ if __name__ == "__main__":
     planner = ACOPlanner(
         evaluator=evaluator, 
         num_waypoints=20,   
-        max_iter=10,        
+        max_iter=500,        
         archive_size=50,     
         num_ants=50,        
         q=0.05,           
