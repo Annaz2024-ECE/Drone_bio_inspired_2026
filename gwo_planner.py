@@ -5,7 +5,7 @@ class GWOPlanner(BasePlanner):
     def __init__(self, evaluator=None, num_wolves=120, max_iter=150, num_waypoints=16): 
         """ 
         继承自 BasePlanner
-        【重大修正】：默认控制点数 num_waypoints 必须从 6 调大到 16！因为地图有 11 个打卡点，6 个点根本装不下！
+        【重大修正】：默认控制点数 num_waypoints 必须从 6 调大到 16, 因为地图有 11 个打卡点, 6 个点根本装不下！
         """
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
@@ -20,6 +20,22 @@ class GWOPlanner(BasePlanner):
         
         # 【核心修改】：不再用纯随机，直接调用闭环雷达扫描初始化函数
         self.positions = self._initialize_wolves()
+
+    def _cubic_chaotic_map(self, size):
+        """ 
+        Cubic 立方混沌映射生成器
+        生成均匀分布在 [0, 1] 的混沌序列，供后续映射到地图真实尺寸
+        """
+        rho = 2.595  # 经典混沌系数
+        chaos_seq = np.zeros(size)
+        x = np.random.rand() * 2 - 1 
+        if x == 0: x = 0.1 
+            
+        for i in range(size):
+            x = rho * x * (1 - x**2)
+            chaos_seq[i] = x
+            
+        return (chaos_seq + 1.0) / 2.0
 
     def _initialize_wolves(self):
         """ 闭环专属初始化：雷达排序 + 3D目标注入 """
@@ -38,11 +54,14 @@ class GWOPlanner(BasePlanner):
         targets_3d.sort(key=lambda p: np.arctan2(p[1] - center_y, p[0] - center_x))
 
         for i in range(self.num_wolves):
-            # 【修改2：加入 Z 轴的随机初始化】
-            rand_x = np.random.uniform(self.env.x_bounds[0] + 5, self.env.x_bounds[1] - 5, self.num_waypoints)
-            rand_y = np.random.uniform(self.env.y_bounds[0] + 5, self.env.y_bounds[1] - 5, self.num_waypoints)
-            # Z 轴不要贴地，稍微飞高点
-            rand_z = np.random.uniform(self.env.z_bounds[0] + 2, self.env.z_bounds[1] - 2, self.num_waypoints)
+            chaos_x = self._cubic_chaotic_map(self.num_waypoints)
+            chaos_y = self._cubic_chaotic_map(self.num_waypoints)
+            chaos_z = self._cubic_chaotic_map(self.num_waypoints)
+            
+            # 映射到真实的地图边界，Z 轴起步设为 5 米防止钻地
+            rand_x = self.env.x_bounds[0] + chaos_x * (self.env.x_bounds[1] - self.env.x_bounds[0])
+            rand_y = self.env.y_bounds[0] + chaos_y * (self.env.y_bounds[1] - self.env.y_bounds[0])
+            rand_z = max(5.0, self.env.z_bounds[0]) + chaos_z * (self.env.z_bounds[1] - max(5.0, self.env.z_bounds[0]))
             
             # 拼装成 3D 点云
             raw_pts = np.column_stack((rand_x, rand_y, rand_z))
@@ -99,13 +118,32 @@ class GWOPlanner(BasePlanner):
             
             self.positions = w_alpha * X1 + w_beta * X2 + w_delta * X3
             
+            # 基于 Alpha 狼精英引导的局部变异 (Elite-guided Mutation)
+            mutation_rate = 0.2  # 选取 20% 的灰狼进行变异，充当敢死队去探路
+            # 变异步长随迭代衰减：前期大范围扰动找缺口(20%边界跨度)，后期小范围平滑微调
+            mutation_scale = 0.2 * (1.0 - l / self.max_iter) 
+            
+            # 随机生成掩码，决定哪些狼变异
+            do_mutation = np.random.rand(self.num_wolves) < mutation_rate
+            
+            # 【保护精英】：由于目前狼群未严格按分数排序，简单保护前2只不参与变异
+            do_mutation[0] = False 
+            do_mutation[1] = False 
+            
+            # 生成围绕 Alpha 狼的高斯扰动噪声
+            noise = np.random.randn(self.num_wolves, self.dim) * (self.ub - self.lb) * mutation_scale
+            mutated_pos = self.alpha_pos + noise
+            
+            # 应用变异：只更新被选中的那 20% 的狼，其余 80% 依然遵循原本的 GWO 包围机制
+            self.positions[do_mutation] = mutated_pos[do_mutation]
+
             if abs(self.last_alpha_score - self.alpha_score) < 1.0: self.stagnation_count += 1
             else: self.stagnation_count, self.last_alpha_score = 0, self.alpha_score
 
             # 使用变量 stagnation_max，让 CoordinatorAgent 药方能生效！
             if self.stagnation_count > getattr(self, 'stagnation_max', 30):
                 self.alpha_score = self.beta_score = self.delta_score = float("inf")
-                # 【修改】：核爆重置后，依然要用带目标基因和雷达排序的方法重生！
+                # 核爆重置后，依然要用带目标基因和雷达排序的方法重生！
                 self.positions = self._initialize_wolves()
                 self.stagnation_count = 0 
             

@@ -251,30 +251,22 @@ class PathEvaluator:
         return total_score, details, env_info
 
     def evaluate_pso_particle(self, raw_waypoints):
+        # 1. 提取控制点之间的间距惩罚 (保留对底层基因的排斥判定)
         spacing_penalty = self.calculate_spacing_penalty(raw_waypoints)
-        raw_score, raw_details, env_info = self.calculate_fitness(raw_waypoints)
         
-        # 提前拦截
-        # 只要粗筛时控制点本身出界了，立刻判死刑，不给它进入下一步画曲线的机会！
-        if (raw_details['fatal_collision'] > 0 or 
-            raw_details['missed_target'] > 0 or 
-            raw_details['altitude_violation'] > 0 or 
-            raw_details['boundary_violation'] > 0):
-            
-            raw_details['spacing_penalty'] = spacing_penalty
-            total_score = sum(raw_details.values())
-            return total_score, raw_details, env_info
-            
-        # 改为获取 bspline_num_points，并正确传给 generate_bspline_path
+        # 【重大修正：废除双标，统一起跑线！】
+        # 只有在相同分辨率(100个点)下算出的总分，才具备公平的进化对比价值。
         num_pts = self.params.get('bspline_num_points', 100)
         smooth_path = self.generate_bspline_path(raw_waypoints, num_points=num_pts)
         
-        base_score, smooth_details, _ = self.calculate_fitness(smooth_path)
+        # 2. 对最终的真实飞行曲线进行全面的体检算分
+        base_score, smooth_details, env_info = self.calculate_fitness(smooth_path)
+        
+        # 3. 补上底层基因的间距惩罚
         smooth_details['spacing_penalty'] = spacing_penalty
         total_score = sum(smooth_details.values())
         
         return total_score, smooth_details, env_info
-
 # ==========================================
 # 3D 测试用例 
 # ==========================================
