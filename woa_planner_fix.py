@@ -121,10 +121,10 @@ class WOAPlanner(BasePlanner):
 
 if __name__ == "__main__":
     # 建议航点数至少大于等于目标区域数量 (haining.json5 中有 11 个 target)
-    planner = WOAPlanner(num_waypoints=20, pop_size=80, max_iter=200)
+    planner = WOAPlanner(num_waypoints=30, pop_size=60, max_iter=200)
     
     best_path, convergence_history = planner.optimize()
     
     print(f"\n规划完成！最终得分: {convergence_history[-1]:,.2f}")
-    
+    print(best_path)
     planner.plot_result(best_path, convergence_history, algo_name="WOA-3D")

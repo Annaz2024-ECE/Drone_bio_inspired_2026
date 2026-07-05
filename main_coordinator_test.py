@@ -8,7 +8,7 @@ from dsaco_planner import DSACOPlanner
 from pso_planner import PSOPlanner
 from gwo_planner import GWOPlanner
 from ssa_planner import SSAPlanner
-from woa_planner_fix import WOAPlannerArg
+from woa_planner_fix2D import WOAPlannerArg
 
 def run_parameter_tuning_loop():
     print("=" * 60)
