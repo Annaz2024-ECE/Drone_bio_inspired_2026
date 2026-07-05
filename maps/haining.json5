@@ -5,39 +5,39 @@
   "end_point": [51.0, 94.0],
   "obstacles": [
     // ==== 南侧建筑群 ====
-    {"type": "rect", "bottom_left": [29, 11], "width": 10, "height": 15, "z_min": 0.0, "z_max": 9.0},   // 1A-1E 
-    {"type": "rect", "bottom_left": [47, 11], "width": 10, "height": 15, "z_min": 0.0, "z_max": 9.0},   // 2A-2E 
-    {"type": "rect", "bottom_left": [30, 31], "width": 4, "height": 8, "z_min": 0.0, "z_max": 7.0},     // 3A,3B 
-    {"type": "rect", "bottom_left": [52, 31], "width": 5, "height": 10, "z_min": 0.0, "z_max": 7.0},    // 4 
+    {"type": "rect", "bottom_left": [29, 11], "width": 10, "height": 15, "z_min": 0.0, "z_max": 5.0},   // 1A-1E 
+    {"type": "rect", "bottom_left": [47, 11], "width": 10, "height": 15, "z_min": 0.0, "z_max": 5.0},   // 2A-2E 
+    {"type": "rect", "bottom_left": [30, 31], "width": 4, "height": 8, "z_min": 0.0, "z_max": 4.0},     // 3A,3B 
+    {"type": "rect", "bottom_left": [52, 31], "width": 5, "height": 10, "z_min": 0.0, "z_max": 4.0},    // 4 
 
-    {"type": "rect", "bottom_left": [36, 35], "width": 3, "height": 3, "z_min": 0.0, "z_max": 3.0},      // 7 
-    {"type": "rect", "bottom_left": [47, 35], "width": 3, "height": 3, "z_min": 0.0, "z_max": 3.0},      // 8 
+    {"type": "rect", "bottom_left": [36, 35], "width": 3, "height": 3, "z_min": 0.0, "z_max": 2},      // 7 
+    {"type": "rect", "bottom_left": [47, 35], "width": 3, "height": 3, "z_min": 0.0, "z_max": 2},      // 8 
     {"type": "circle", "center": [37, 32], "radius": 1, "z_min": 0.0, "z_max": 1.0},                     // 5 
     {"type": "circle", "center": [48, 32], "radius": 1, "z_min": 0.0, "z_max": 1.0},                     // 6 
     {"type": "circle", "center": [43, 38], "radius": 2, "z_min": 0.0, "z_max": 2.0},                     // 9 
 
-    // ==== 西侧教学楼 (教学区，约 20m) ====
-    {"type": "rect", "bottom_left": [13, 51], "width": 5, "height": 4, "z_min": 0.0, "z_max": 9.0},     // 25 
-    {"type": "rect", "bottom_left": [15, 40], "width": 9, "height": 5, "z_min": 0.0, "z_max": 10.0},     // 26 
-    {"type": "rect", "bottom_left": [20, 36], "width": 4, "height": 4, "z_min": 0.0, "z_max": 10.0},     // 26 (附属)
-    {"type": "rect", "bottom_left": [32, 60], "width": 4, "height": 6, "z_min": 0.0, "z_max": 3.0},     // 24 
+    // ==== 西侧教学楼 (教学区) ====
+    {"type": "rect", "bottom_left": [13, 51], "width": 5, "height": 4, "z_min": 0.0, "z_max": 4.5},     // 25 
+    {"type": "rect", "bottom_left": [15, 40], "width": 9, "height": 5, "z_min": 0.0, "z_max": 5.0},     // 26 
+    {"type": "rect", "bottom_left": [20, 36], "width": 4, "height": 4, "z_min": 0.0, "z_max": 5.0},     // 26 (附属)
+    {"type": "rect", "bottom_left": [32, 60], "width": 4, "height": 6, "z_min": 0.0, "z_max": 1.0},     // 24 
 
-    // ==== 东侧教学楼、图书馆、食堂和书院 (图书馆主楼设高一点，比如 25m) ====
-    {"type": "rect", "bottom_left": [51, 63], "width": 6, "height": 4, "z_min": 0.0, "z_max": 7.0},     // 21 
-    {"type": "rect", "bottom_left": [59, 64], "width": 5, "height": 4, "z_min": 0.0, "z_max": 7.0},     // 20 
-    {"type": "rect", "bottom_left": [61, 57], "width": 3, "height": 5, "z_min": 0.0, "z_max": 7.0},     // 19 
-    {"type": "circle", "center": [56, 59], "radius": 3, "z_min": 0.0, "z_max": 6.0},                    // 18 
+    // ==== 东侧教学楼、图书馆、食堂和书院 (图书馆主楼设高一点) ====
+    {"type": "rect", "bottom_left": [51, 63], "width": 6, "height": 4, "z_min": 0.0, "z_max": 5.0},     // 21 
+    {"type": "rect", "bottom_left": [59, 64], "width": 5, "height": 4, "z_min": 0.0, "z_max": 5.0},     // 20 
+    {"type": "rect", "bottom_left": [61, 57], "width": 3, "height": 5, "z_min": 0.0, "z_max": 5.0},     // 19 
+    {"type": "circle", "center": [56, 59], "radius": 3, "z_min": 0.0, "z_max": 4.0},                    // 18 
 
-    {"type": "rect", "bottom_left": [59, 44], "width": 5, "height": 7, "z_min": 0.0, "z_max": 4.0},     // 16
+    {"type": "rect", "bottom_left": [59, 44], "width": 5, "height": 7, "z_min": 0.0, "z_max": 2.0},     // 16
 
-    {"type": "rect", "bottom_left": [68, 58], "width": 7, "height": 10, "z_min": 0.0, "z_max": 6},    // 15
+    {"type": "rect", "bottom_left": [68, 58], "width": 7, "height": 10, "z_min": 0.0, "z_max": 4.5},    // 15
     {"type": "rect", "bottom_left": [79, 58], "width": 7, "height": 10, "z_min": 0.0, "z_max": 5},    // 12
-    {"type": "rect", "bottom_left": [75, 42], "width": 10, "height": 12, "z_min": 0.0, "z_max": 6},   // 11
-    {"type": "rect", "bottom_left": [69, 29], "width": 12, "height": 10, "z_min": 0.0, "z_max": 5.5},   // 10
+    {"type": "rect", "bottom_left": [75, 42], "width": 10, "height": 12, "z_min": 0.0, "z_max": 4.5},   // 11
+    {"type": "rect", "bottom_left": [69, 29], "width": 12, "height": 10, "z_min": 0.0, "z_max": 5},   // 10
 
     // ==== 北侧体育馆 (挑高结构，约 25m) ====
-    {"type": "rect", "bottom_left": [52, 74], "width": 6, "height": 13, "z_min": 0.0, "z_max": 8},    // 23
-    {"type": "rect", "bottom_left": [72, 86], "width": 3, "height": 3, "z_min": 0.0, "z_max": 4.0}      // 22
+    {"type": "rect", "bottom_left": [52, 74], "width": 6, "height": 13, "z_min": 0.0, "z_max": 5},    // 23
+    {"type": "rect", "bottom_left": [72, 86], "width": 3, "height": 3, "z_min": 0.0, "z_max": 3.0}      // 22
   ],
 
   "target_areas": [

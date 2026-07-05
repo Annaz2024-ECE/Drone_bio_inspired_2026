@@ -18,10 +18,11 @@ class UAVEnvironment3D:
         self.y_bounds = [0, data['bounds'][1]]
         
         # 寻找地图中的最高建筑，用于设置 Z 轴边界
-        max_z = 30.0 
+        max_z = 11.0 
         for obs in data['obstacles']:
-            max_z = max(max_z, obs.get('z_max', 20.0))
-        self.z_bounds = [0, max_z + 10] # 天花板留出 10m 余量
+            max_z = max(max_z, obs.get('z_max', 11.0))
+        self.z_bounds = [0, max_z + 1] # 天花板留出 10m 余量
+        print(f"max_z = {self.z_bounds[1]}")
 
         # 起点和终点：如果 JSON 中只有二维，默认 Z=0，建议后续传入 [x, y, z]
         def to_3d(point):
@@ -73,7 +74,7 @@ class UAVEnvironment3D:
             target['z_max'] = optimal_height + 4
             
             # (可选) 为了方便你调试，可以把计算出的值打出来看看
-            print(f"目标 {target['name']}: 半径={radius}m, 最佳高度={optimal_height:.1f}m, 设定范围=[{target['z_min']:.1f}, {target['z_max']:.1f}]")
+            # print(f"目标 {target['name']}: 半径={radius}m, 最佳高度={optimal_height:.1f}m, 设定范围=[{target['z_min']:.1f}, {target['z_max']:.1f}]")
 
     def calculate_distance(self, point1, point2):
         """ 计算两点之间的 3D 欧氏距离 """
@@ -267,9 +268,9 @@ if __name__ == "__main__":
     # ---------------- 3D 碰撞检测测试 ----------------
     
     # 路线1: 【安全航线】直接拔高到 30m 高空，径直飞跃中心建筑群 (最高建筑为 25m)
-    p_safe_1 = np.array([43.0, 3.0, 30.0])
-    p_safe_2 = np.array([43.0, 50.0, 30.0]) # 飞跃中心圆塔 (高 25m)
-    p_safe_3 = np.array([51.0, 94.0, 30.0]) # 飞向终点
+    p_safe_1 = np.array([43.0, 3.0, 10.0])
+    p_safe_2 = np.array([43.0, 50.0, 10.0]) # 飞跃中心圆塔 (高 25m)
+    p_safe_3 = np.array([51.0, 94.0, 10.0]) # 飞向终点
     
     # 路线2: 【穿模航线】在 5m 低空，直线横穿中心建筑群
     p_collide_1 = np.array([43.0, 3.0, 5.0])
