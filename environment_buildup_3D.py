@@ -39,10 +39,41 @@ class UAVEnvironment3D:
             o['z_min'] = o.get('z_min', 0.0)
             o['z_max'] = o.get('z_max', 20.0)
             self.obstacles.append(o)
-            
+
+        # ==========================================
+        # 【新增】1. 假设无人机相机水平视场角 (FOV) 为 90度
+        # 主流消费级无人机（如大疆 Mavic 系列）HFOV 通常在 70°~85°，取 90° 好算且留有余量
+        # ==========================================
+        self.default_camera_fov_deg = 90.0  
+
+        # ==========================================
+        # 【核心修改】2. 动态计算巡检区域 (Target Areas) 的 Z 轴范围
+        # ==========================================
         self.target_areas = data['target_areas']
         for target in self.target_areas:
             target['center'] = np.array(target['center'])
+            
+            # 获取该目标对应的半径
+            radius = target['radius']
+            
+            # 如果有特殊目标需要自定义 FOV，可以从 json 读取，没有则用全局默认
+            fov_deg = target.get('camera_fov', self.default_camera_fov_deg)
+            half_fov_rad = math.radians(fov_deg / 2.0)
+            
+            # ---- 物理公式：覆盖半径 R 所需的最佳悬停高度 ----
+            # 几何关系：R = H * tan(FOV/2)  =>  H = R / tan(FOV/2)
+            optimal_height = radius / math.tan(half_fov_rad)
+            
+            # 设置绝对安全最低高度，防止飞得太低撞到地面凸起物（如路灯、行人）
+            optimal_height = max(optimal_height, 3.0) 
+            target['z_min'] = optimal_height
+            
+            # 2. z_max：设置为最佳高度 + 8米（或 1.5倍），飞高永远能覆盖更大范围，
+            #    且高空障碍物极少，给算法极大的自由度去“命中”目标。
+            target['z_max'] = optimal_height + 4
+            
+            # (可选) 为了方便你调试，可以把计算出的值打出来看看
+            print(f"目标 {target['name']}: 半径={radius}m, 最佳高度={optimal_height:.1f}m, 设定范围=[{target['z_min']:.1f}, {target['z_max']:.1f}]")
 
     def calculate_distance(self, point1, point2):
         """ 计算两点之间的 3D 欧氏距离 """
