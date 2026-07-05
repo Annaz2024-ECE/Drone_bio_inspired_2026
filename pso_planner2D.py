@@ -2,19 +2,11 @@ import numpy as np
 from base_planner import BasePlanner
 
 class PSOPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_particles=100, max_iter=200, num_waypoints=15, disturb_ratio=0.15):
-        """
-        3D PSO 路径规划器
-        :param evaluator: 路径评价器
-        :param num_particles: 粒子数量
-        :param max_iter: 最大迭代次数
-        :param num_waypoints: 中间控制点数量
-        :param disturb_ratio: 初始化扰动幅度相对于环境尺寸的比例
-        """
+    def __init__(self, evaluator=None, num_particles=100, max_iter=200, num_waypoints=15):
+        """ 继承自 BasePlanner 的 PSO 算法 """
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
         self.num_particles = num_particles
-        self.disturb_ratio = disturb_ratio
         
         # PSO 核心参数
         self.w_max = 0.9  
@@ -23,58 +15,40 @@ class PSOPlanner(BasePlanner):
         self.c2 = 1.5 
         self.v_max = 8.0 
         
-        # 初始化粒子位置和速度
+        # 初始化粒子位置和速度 (使用基类的 self.dim)
         self.particles = self._initialize_particles()
         self.velocities = np.zeros((self.num_particles, self.dim))
         
-        # 记录个体最优和全局最优
+        # 记录个体最优 (pbest) 和全局最优 (gbest)
         self.pbest_pos = np.copy(self.particles)
         self.pbest_scores = np.full(self.num_particles, np.inf)
         self.gbest_pos = np.zeros(self.dim)
         self.gbest_score = np.inf
 
     def _initialize_particles(self):
-        """ 生成 3D 初始粒子群，并实施投影排序防打结策略 """
+        """ 初始化粒子并实施投影排序防打结策略 """
         particles = np.zeros((self.num_particles, self.dim))
-        
-        start = self.env.start_point   # (x, y, z)
-        end = self.env.end_point
-        direction_vec = end - start
-        direction_norm = np.linalg.norm(direction_vec)
-        if direction_norm == 0:
-            direction_vec = np.array([1.0, 0.0, 0.0])  # 防止零向量
-        
-        # 计算各维度扰动范围（环境尺寸 * disturb_ratio）
-        x_range = (self.env.x_bounds[1] - self.env.x_bounds[0]) * self.disturb_ratio
-        y_range = (self.env.y_bounds[1] - self.env.y_bounds[0]) * self.disturb_ratio
-        z_range = (self.env.z_bounds[1] - self.env.z_bounds[0]) * self.disturb_ratio
+        direction_vec = self.env.end_point - self.env.start_point
         
         for i in range(self.num_particles):
-            # 在起终点之间均匀生成原始控制点（3D）
-            t = np.linspace(0, 1, self.num_waypoints + 2)[1:-1]  # 不包括端点
-            base_x = start[0] + t * direction_vec[0]
-            base_y = start[1] + t * direction_vec[1]
-            base_z = start[2] + t * direction_vec[2]
-            raw_waypoints = np.column_stack((base_x, base_y, base_z))
+            x_vals = np.linspace(self.env.start_point[0], self.env.end_point[0], self.num_waypoints + 2)[1:-1]
+            y_vals = np.linspace(self.env.start_point[1], self.env.end_point[1], self.num_waypoints + 2)[1:-1]
             
-            # 添加各维度独立随机扰动（均匀分布）
-            noise_x = np.random.uniform(-x_range, x_range, self.num_waypoints)
-            noise_y = np.random.uniform(-y_range, y_range, self.num_waypoints)
-            noise_z = np.random.uniform(-z_range, z_range, self.num_waypoints)
-            noisy = raw_waypoints + np.column_stack((noise_x, noise_y, noise_z))
+            noise_x = np.random.uniform(-40, 40, self.num_waypoints)
+            noise_y = np.random.uniform(-40, 40, self.num_waypoints)
+            raw_waypoints = np.column_stack((x_vals + noise_x, y_vals + noise_y))
             
-            # 【防打结】将控制点向主方向投影并排序
-            projections = np.dot(noisy - start, direction_vec)
-            sorted_waypoints = noisy[np.argsort(projections)]
+            projections = np.dot(raw_waypoints - self.env.start_point, direction_vec)
+            sorted_waypoints = raw_waypoints[np.argsort(projections)]
             
-            # 展平为一维并限制在边界内
+            # 展平为一维存入，并限制边界
             particles[i] = np.clip(sorted_waypoints.flatten(), self.lb, self.ub)
             
         return particles
 
     def optimize(self):
-        """ PSO 主循环（与 2D 完全一致，因所有操作基于 self.dim） """
-        print("开始 3D PSO 粒子群算法路径规划...")
+        """ PSO 主循环 """
+        print("开始 PSO 粒子群算法路径规划...")
         
         # 初始评估
         for i in range(self.num_particles):
@@ -89,6 +63,7 @@ class PSOPlanner(BasePlanner):
             w_current = self.w_max - (self.w_max - self.w_min) * (iteration / self.max_iter)
             
             for i in range(self.num_particles):
+                # 完全矩阵化的一维计算
                 r1 = np.random.rand(self.dim)
                 r2 = np.random.rand(self.dim)
                 
@@ -117,9 +92,7 @@ class PSOPlanner(BasePlanner):
                 
         return self._decode_path(self.gbest_pos), self.convergence_curve
 
-
 if __name__ == "__main__":
-    planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=15)
+    planner = PSOPlanner()
     best_path, history = planner.optimize()
-    planner.evaluator.debug_target_coverage(best_path)
-    planner.plot_result(best_path, history, algo_name="PSO-3D")
+    planner.plot_result(best_path, history, algo_name="PSO")

@@ -2,24 +2,17 @@ import numpy as np
 from base_planner import BasePlanner
 
 class SSAPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_sparrows=100, max_iter=200, num_waypoints=15, disturb_ratio=0.15):
-        """
-        3D 麻雀搜索算法路径规划器
-        :param evaluator: 路径评价器实例
-        :param num_sparrows: 麻雀种群数量
-        :param max_iter: 最大迭代次数
-        :param num_waypoints: 中间控制点数量
-        :param disturb_ratio: 初始化时随机扰动幅度相对于环境尺寸的比例
-        """
+    def __init__(self, evaluator=None, num_sparrows=100, max_iter=200, num_waypoints=15):
+        """ 继承自 BasePlanner 的 SSA 麻雀搜索算法 """
+        # 调用父类初始化，统管环境、维度、边界等
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
         self.num_sparrows = num_sparrows
-        self.disturb_ratio = disturb_ratio   # 扰动比例
         
         # SSA 核心参数
-        self.PD = 0.2   # 发现者比例
-        self.SD = 0.1   # 侦察者比例
-        self.ST = 0.8   # 安全阈值
+        self.PD = 0.2  # 发现者比例
+        self.SD = 0.1  # 侦察者比例
+        self.ST = 0.8  # 安全阈值
         
         self.num_producers = int(self.num_sparrows * self.PD)
         self.num_scouts = int(self.num_sparrows * self.SD)
@@ -32,54 +25,41 @@ class SSAPlanner(BasePlanner):
         self.gbest_score = np.inf
 
     def _initialize_sparrows(self):
-        """ 生成 3D 初始麻雀种群，并引入投影排序防打结策略 """
+        """ 初始化麻雀位置，并引入投影排序防打结策略 """
         sparrows = np.zeros((self.num_sparrows, self.dim))
-        
-        start = self.env.start_point   # (x,y,z)
-        end = self.env.end_point
-        direction_vec = end - start
-        direction_norm = np.linalg.norm(direction_vec)
-        
-        # 计算每个维度可用的扰动范围（环境边界大小的一部分）
-        x_range = (self.env.x_bounds[1] - self.env.x_bounds[0]) * self.disturb_ratio
-        y_range = (self.env.y_bounds[1] - self.env.y_bounds[0]) * self.disturb_ratio
-        z_range = (self.env.z_bounds[1] - self.env.z_bounds[0]) * self.disturb_ratio
+        direction_vec = self.env.end_point - self.env.start_point
         
         for i in range(self.num_sparrows):
-            # 1. 在起终点之间均匀生成原始控制点（3D）
-            t = np.linspace(0, 1, self.num_waypoints + 2)[1:-1]  # 不包括端点
-            base_x = start[0] + t * direction_vec[0]
-            base_y = start[1] + t * direction_vec[1]
-            base_z = start[2] + t * direction_vec[2]
-            raw_waypoints = np.column_stack((base_x, base_y, base_z))
+            # 在起终点之间均匀取点
+            x_vals = np.linspace(self.env.start_point[0], self.env.end_point[0], self.num_waypoints + 2)[1:-1]
+            y_vals = np.linspace(self.env.start_point[1], self.env.end_point[1], self.num_waypoints + 2)[1:-1]
             
-            # 2. 添加各维度独立随机扰动（均匀分布）
-            noise_x = np.random.uniform(-x_range, x_range, self.num_waypoints)
-            noise_y = np.random.uniform(-y_range, y_range, self.num_waypoints)
-            noise_z = np.random.uniform(-z_range, z_range, self.num_waypoints)
-            noisy = raw_waypoints + np.column_stack((noise_x, noise_y, noise_z))
+            # 加入全图高强度随机扰动
+            noise_x = np.random.uniform(-40, 40, self.num_waypoints)
+            noise_y = np.random.uniform(-40, 40, self.num_waypoints)
+            raw_waypoints = np.column_stack((x_vals + noise_x, y_vals + noise_y))
             
-            # 3. 【防打结】将控制点向主方向投影并排序
-            projections = np.dot(noisy - start, direction_vec)
-            sorted_waypoints = noisy[np.argsort(projections)]
+            # 【防打结神技】将控制点向主方向投影并排序
+            projections = np.dot(raw_waypoints - self.env.start_point, direction_vec)
+            sorted_waypoints = raw_waypoints[np.argsort(projections)]
             
-            # 4. 展平并约束在边界内
+            # 将 2D 坐标展平为 1D，并限制在边界内
             sparrows[i] = np.clip(sorted_waypoints.flatten(), self.lb, self.ub)
             
         return sparrows
 
     def optimize(self):
-        """ 运行 SSA 主循环（3D 版本） """
-        print("开始 3D SSA 麻雀搜索算法路径规划...")
+        """ 运行 SSA 主循环 """
+        print("开始 SSA 麻雀搜索算法路径规划...")
         
         # 1. 初始适应度评估
         for i in range(self.num_sparrows):
             full_path = self._decode_path(self.sparrows[i])
-            self.fitness[i], _, _ = self.evaluator.evaluate_pso_particle(full_path)
+            self.fitness[i], _ , _ = self.evaluator.evaluate_pso_particle(full_path)
             if self.fitness[i] < self.gbest_score:
                 self.gbest_score = self.fitness[i]
                 self.gbest_pos = np.copy(self.sparrows[i])
-        
+                
         # 2. 核心迭代寻优
         for iteration in range(self.max_iter):
             sort_indices = np.argsort(self.fitness)
@@ -89,60 +69,67 @@ class SSAPlanner(BasePlanner):
             
             new_sparrows = np.copy(self.sparrows)
             
-            # (1) 发现者更新
+            # (1) 发现者 (Producers) 更新位置
             R2 = np.random.rand()
             for i in range(self.num_producers):
                 idx = sort_indices[i]
                 if R2 < self.ST:
                     alpha = np.random.rand()
-                    step = np.random.randn(self.dim) * 15.0   # 步长可根据环境调整
+                    step = np.random.randn(self.dim) * 15.0 
                     new_sparrows[idx] = self.sparrows[idx] + step * np.exp(-(iteration + 1) / (alpha * self.max_iter + 1e-8))
                 else:
                     new_sparrows[idx] = self.sparrows[idx] + np.random.randn(self.dim) * 2.0
-            
-            # (2) 加入者更新
+                    
+            # (2) 加入者 (Scroungers) 更新位置
             for i in range(self.num_producers, self.num_sparrows):
                 idx = sort_indices[i]
                 if i > self.num_sparrows / 2:
-                    # 饥饿麻雀随机重生
+                    # 极度饥饿的麻雀，全图随机重生，保证种群基因多样性
                     new_sparrows[idx] = np.random.uniform(self.lb, self.ub, self.dim)
                 else:
+                    # 向当前最优位置靠拢
                     A = np.random.choice([-1, 1], size=self.dim)
                     new_sparrows[idx] = best_pos_current + np.abs(self.sparrows[idx] - best_pos_current) * (A / 2.0)
-            
-            # (3) 侦察者更新
+                    
+            # (3) 侦察者/警戒者 (Scouts) 更新位置
             scout_indices = np.random.choice(self.num_sparrows, self.num_scouts, replace=False)
             for idx in scout_indices:
                 if self.fitness[idx] > self.fitness[sort_indices[0]]:
+                    # 处于边缘的麻雀向中心靠拢
                     new_sparrows[idx] = best_pos_current + np.random.randn(self.dim) * np.abs(self.sparrows[idx] - best_pos_current)
                 else:
+                    # 处于中心的麻雀随机逃窜
                     new_sparrows[idx] = self.sparrows[idx] + np.random.uniform(-1, 1) * (np.abs(self.sparrows[idx] - worst_pos_current) / (self.fitness[idx] - worst_fit_current + 1e-8))
-            
-            # (4) 越界处理与适应度评估
+
+            # (4) 越界处理与适应度重新评估
             for i in range(self.num_sparrows):
                 new_sparrows[i] = np.clip(new_sparrows[i], self.lb, self.ub)
-                full_path = self._decode_path(new_sparrows[i])
-                score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                score, _ , _ = self.evaluator.evaluate_pso_particle(self._decode_path(new_sparrows[i]))
                 
                 self.sparrows[i] = new_sparrows[i]
                 self.fitness[i] = score
                 
+                # 更新全局最优
                 if score < self.gbest_score:
                     self.gbest_score = score
                     self.gbest_pos = np.copy(new_sparrows[i])
-            
+                    
+            # 记录历史最优得分
             self.convergence_curve.append(self.gbest_score)
             
+            # 控制台输出
             if (iteration + 1) % 50 == 0 or iteration == 0:
                 print(f"  > 迭代 {iteration+1:03d}/{self.max_iter} | 全局最优得分: {self.gbest_score:.2f}")
-        
+                
+        # 统一返回：解码后的最优 2D 路径，以及历史收敛曲线
         return self._decode_path(self.gbest_pos), self.convergence_curve
-
 
 # ===================== 本地单文件测试 =====================
 if __name__ == "__main__":
-    # 注意：需要先定义好环境（PathEvaluator 内部已包含3D环境）
-    planner = SSAPlanner(num_sparrows=80, max_iter=150, num_waypoints=12)
+    planner = SSAPlanner()
     best_path, history = planner.optimize()
-    planner.evaluator.debug_target_coverage(best_path)
-    planner.plot_result(best_path, history, algo_name="SSA-3D")
+
+    # 完美复用 BasePlanner 的画图功能，自动抓取参数！
+    planner.plot_result(best_path, history, algo_name="SSA")
+
+   
