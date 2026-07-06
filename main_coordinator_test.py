@@ -33,7 +33,7 @@ def run_parameter_tuning_loop():
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "WOA"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
+    TARGET_ALGO = "GWO"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
     # ==========================================
     
     print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")
@@ -64,7 +64,17 @@ def run_parameter_tuning_loop():
     
     for round_idx in range(1, meta_rounds + 1):
         print(f"\n>>>>>>>>>>>>  第 {round_idx} 轮 3D 调优测试 [{TARGET_ALGO}] >>>>>>>>>>>>")
-        
+        # 在改了规则后，重新核算历史最佳路线的基准分
+        if round_idx > 1 and hasattr(planner, 'historical_best_pos'):
+            # 拿老路线在新评价器里跑一次，获取当前规则下的真实分数
+            true_benchmark, _, _ = evaluator.evaluate_pso_particle(planner._decode_path(planner.historical_best_pos))
+            # 刷新算法的记忆
+            planner.historical_best_score = true_benchmark
+            
+            # 如果是 GWO，还要顺便刷新 Alpha 狼的记忆
+            if hasattr(planner, 'alpha_score'):
+                planner.alpha_score = true_benchmark
+
         # 1. 跑当前参数下的算法
         best_path, history = planner.optimize()
         

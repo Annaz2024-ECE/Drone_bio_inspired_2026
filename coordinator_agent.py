@@ -22,6 +22,7 @@ class CoordinatorAgent:
         specific_params = {} 
         is_finished = False 
         specific_params['emergency_escape'] = False # 默认关闭逃逸模式
+        specific_params['press_down'] = False
         
         print(f"\n[调参] 第 {self.meta_iteration} 轮诊断中... (负责压榨 {current_algo} 的极限)")
 
@@ -98,6 +99,13 @@ class CoordinatorAgent:
                     
         else:
             self.stuck_counter = 0
+            # 如果没有撞墙/漏打卡，且重力惩罚大于 1500 (约等于平均高度超过 6-7 米)
+            
+        is_safe_but_high = (not is_failing) and (details.get('gravity_cost', 0) > 1500)
+
+        if is_safe_but_high and current_algo == "GWO":
+            specific_params['press_down'] = True
+            actions_taken.append("TUNE_GWO: 路线已安全，激活贴地飞行预案！向下方试探安全底线！")
 
         # ==========================================
         # 1. 算法专属参数微操 (维持原样即可，数学逻辑通用)

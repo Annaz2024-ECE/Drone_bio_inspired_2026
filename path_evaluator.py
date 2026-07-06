@@ -186,7 +186,7 @@ class PathEvaluator:
         # 1. 距离算分
         details['distance'] = self.calculate_path_length(path_points)
         
-        # 【修复】：清理了重复定义的冗余代码
+        # 清理了重复定义的冗余代码
         margin_layers = self.params.get('margin_layers', [0.5, 0.2])
         layer_penalty = self.penalties.get('margin_violation', 5000.0) / len(margin_layers)
         bound_penalty = self.penalties.get('boundary_violation', 50000.0)
@@ -243,7 +243,7 @@ class PathEvaluator:
             if angle > max_turn:
                 details['sharp_turn'] += sharp_turn_pen
 
-        # 4. 【修复注释】：3D 悬空圆柱打卡检测
+        # 4. 3D 悬空圆柱打卡检测
         details['missed_target'] += self.calculate_target_penalty(path_points)
 
         env_info = {
@@ -258,7 +258,6 @@ class PathEvaluator:
         # 1. 提取控制点之间的间距惩罚 (保留对底层基因的排斥判定)
         spacing_penalty = self.calculate_spacing_penalty(raw_waypoints)
         
-        # 【重大修正：废除双标，统一起跑线！】
         # 只有在相同分辨率(100个点)下算出的总分，才具备公平的进化对比价值。
         num_pts = self.params.get('bspline_num_points', 100)
         smooth_path = self.generate_bspline_path(raw_waypoints, num_points=num_pts)

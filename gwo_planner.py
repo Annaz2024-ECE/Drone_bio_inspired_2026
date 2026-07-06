@@ -124,9 +124,14 @@ class GWOPlanner(BasePlanner):
             mutation_scale = 0.2 * (1.0 - l / self.max_iter) 
 
             is_emergency = getattr(self, 'emergency_escape', False)
+            is_press_down = getattr(self, 'press_down', False) # 新增：读取老中医的下压指令
+            
             if is_emergency:
                 mutation_rate = 0.5  # 卡死时，扩大敢死队规模到 50%
                 mutation_scale = 0.5 # 极度放大水平面的乱窜范围（实现“试着拐弯”）
+            elif is_press_down:
+                mutation_rate = 0.3  # 抓 30% 的狼去试探低空
+                mutation_scale = 0.1 # 水平方向不大动，仅仅试探高度，步长调小
             
             # 随机生成掩码，决定哪些狼变异
             do_mutation = np.random.rand(self.num_wolves) < mutation_rate
@@ -138,24 +143,26 @@ class GWOPlanner(BasePlanner):
             # 生成围绕 Alpha 狼的高斯扰动噪声
             noise = np.random.randn(self.num_wolves, self.dim) * (self.ub - self.lb) * mutation_scale
 
-            # 如果是紧急逃逸，强制给予物理维度的向上推力（实现“试着往上飞”）
+            # 根据指令注入 Z 轴物理推力
             if is_emergency:
                 # 遍历所有控制点的 Z 轴 (数组结构: x1,y1,z1, x2,y2,z2... Z的索引是 2, 5, 8...)
                 for d in range(2, self.dim, 3): 
                     noise[:, d] += 15.0 # 强制向上方拉升 15 米！
+            elif is_press_down:
+                for d in range(2, self.dim, 3): 
+                    noise[:, d] -= 3.0  # 强制向下试探 3 米！寻找更省电的低空缝隙！
                     
             mutated_pos = self.alpha_pos + noise
             
             # 应用变异：只更新被选中的那 20% 的狼，其余 80% 依然遵循原本的 GWO 包围机制
             self.positions[do_mutation] = mutated_pos[do_mutation]
+            # ==========================================
 
             if abs(self.last_alpha_score - self.alpha_score) < 1.0: self.stagnation_count += 1
             else: self.stagnation_count, self.last_alpha_score = 0, self.alpha_score
 
-            # 使用变量 stagnation_max，让 CoordinatorAgent 药方能生效！
             if self.stagnation_count > getattr(self, 'stagnation_max', 30):
                 self.alpha_score = self.beta_score = self.delta_score = float("inf")
-                # 核爆重置后，依然要用带目标基因和雷达排序的方法重生！
                 self.positions = self._initialize_wolves()
                 self.stagnation_count = 0 
             
@@ -163,10 +170,44 @@ class GWOPlanner(BasePlanner):
             if (l + 1) % 50 == 0 or l == 0:
                 print(f"  > 迭代 {l+1:03d}/{self.max_iter} | 历史最佳得分: {self.historical_best_score:,.2f}")
                 
-        # 统一返回两个参数：解码后的2D最优路径，以及历史收敛曲线
         return self._decode_path(self.historical_best_pos), self.convergence_curve
 
 if __name__ == "__main__":
-    planner = GWOPlanner()
+    import matplotlib.pyplot as plt
+    from path_evaluator import PathEvaluator
+
+    # 1. 独立实例化评价器和算法
+    evaluator = PathEvaluator()
+    planner = GWOPlanner(evaluator=evaluator)
+    
+    # 2. 执行优化
     best_path, history = planner.optimize()
-    planner.plot_result(best_path, history, algo_name="GWO")
+    
+    # 【新增功能】：上帝视角 —— 观察所有灰狼的最终死活位置
+    print("\n 正在绘制狼群最终分布 3D 散点图...")
+    fig = plt.figure(figsize=(12, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # 画出建筑物和目标圈
+    evaluator.env.draw_environment_3d(ax)
+    
+    # 将 120 只狼的最终坐标全部画出来！
+    # 设置透明度 alpha=0.15，如果很多狼死死挤在一起，那个地方颜色就会变得极其深（发黑）
+    for i in range(planner.num_wolves):
+        # 把狼的一维基因数组还原成 (16, 3) 的 3D 控制点
+        wolf_pts = planner.positions[i].reshape((planner.num_waypoints, 3))
+        ax.scatter(wolf_pts[:, 0], wolf_pts[:, 1], wolf_pts[:, 2], 
+                   c='blue', alpha=0.15, s=15, marker='o')
+                   
+    # 最后，用高亮粉色画出 Alpha 狼（历史最佳）跑出的丝滑曲线
+    smooth_path = evaluator.generate_bspline_path(best_path, num_points=100)
+    ax.plot(smooth_path[:, 0], smooth_path[:, 1], smooth_path[:, 2], 
+            color='#FF007F', linewidth=4, label='Alpha Wolf (Best Path)')
+            
+    ax.set_title("GWO Final Population Distribution (Checking Stagnation)", fontsize=14, fontweight='bold')
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
+
+    # 原本的收敛曲线图依然保留
+    planner.plot_result(best_path, history, algo_name="GWO_Scatter_Check")
