@@ -166,7 +166,7 @@ class PathEvaluator:
                 # 动态读取惩罚值，如果没有被 Agent 修改，就默认使用你的阶梯惩罚
                 base_pen = self.penalties.get('missed_target_base', 500000.0)
                 factor_pen = self.penalties.get('missed_target_factor', 1.0)
-                total_target_penalty += base_pen + ((min_missed_dist ** 2.0) * 20000.0)
+                total_target_penalty += base_pen + ((min_missed_dist ** factor_pen) * 20000.0)
                 
         return total_target_penalty
 
