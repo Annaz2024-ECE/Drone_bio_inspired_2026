@@ -9,6 +9,7 @@ from pso_planner import PSOPlanner
 from gwo_planner import GWOPlanner
 from ssa_planner import SSAPlanner
 from woa_planner_fix import WOAPlanner
+from hybrid_pso_gwo import HybridPSOGWO
 
 def run_parameter_tuning_loop():
     print("=" * 60)
@@ -27,7 +28,8 @@ def run_parameter_tuning_loop():
         "PSO": PSOPlanner,
         "GWO": GWOPlanner,
         "SSA": SSAPlanner,
-        "WOA": WOAPlanner
+        "WOA": WOAPlanner,
+        "HybridPSOGWO": HybridPSOGWO
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
@@ -53,7 +55,7 @@ def run_parameter_tuning_loop():
     elif TARGET_ALGO == "PSO": kwargs['num_particles'] = pop_size
     elif TARGET_ALGO == "GWO": kwargs['num_wolves'] = pop_size
     elif TARGET_ALGO == "SSA": kwargs['num_sparrows'] = pop_size
-    elif TARGET_ALGO == "WOA": kwargs['pop_size'] = pop_size
+    elif TARGET_ALGO in ["WOA", "HybridPSOGWO"]: kwargs['pop_size'] = pop_size 
 
     # 带着正确的种群规模出生，底层 3D 矩阵直接完美生成！
     planner = PlannerClass(**kwargs)
