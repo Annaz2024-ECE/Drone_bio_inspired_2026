@@ -13,19 +13,21 @@ class PathEvaluator:
         # 基础惩罚权重
         self.penalties = {
             'fatal_collision': 1000000.0,  
-            'missed_target_base': 500000.0,     
-            'missed_target_factor': 1.0,      
-            'sharp_turn': 10000.0,         
-            'margin_violation': 5000.0,     
+            'missed_target_base': 500000.0,
+            'missed_target_factor': 1.0,    
+            'sharp_turn': 10000.0,   
+            'margin_violation': 5000.0,
             'altitude_violation': 50000.0,
-            'boundary_violation': 50000.0  
+            'boundary_violation': 50000.0,
+            'pitch_violation': 20000.0
         }
 
         self.params = {
-            'max_turn_angle': 120.0,     
+            'max_turn_angle': 120.0,
+            'max_pitch_angle': 45.0,
             'bspline_num_points': 100,   # B-Spline 参数
-            'min_waypoint_dist': 5.0,    
-            'margin_layers': [0.5, 0.2]  
+            'min_waypoint_dist': 5.0,
+            'margin_layers': [0.5, 0.2]
         }
         
         self.ideal_min_distance = self._calculate_ideal_min_distance()
@@ -115,6 +117,15 @@ class PathEvaluator:
         cos_theta = np.clip(np.dot(v1, v2) / (norm_v1 * norm_v2), -1.0, 1.0)
         return np.degrees(np.arccos(cos_theta))
 
+    def calculate_pitch_angle(self, p1, p2):
+        vec = p2 - p1
+        dz = vec[2] # Z轴上的高度差
+        dist_3d = np.linalg.norm(vec)
+        if dist_3d == 0: return 0.0
+        # 利用反正弦函数计算夹角
+        pitch_rad = np.arcsin(np.clip(dz / dist_3d, -1.0, 1.0))
+        return np.abs(np.degrees(pitch_rad))
+
     def point_to_segment_distance(self, point, seg_a, seg_b):
         line_vec = seg_b - seg_a
         point_vec = point - seg_a
@@ -180,7 +191,8 @@ class PathEvaluator:
             'missed_target': 0.0,
             'altitude_violation': 0.0,
             'boundary_violation': 0.0,
-            'gravity_cost': 0.0
+            'gravity_cost': 0.0,
+            'pitch_violation': 0.0 # 记录俯仰角违规扣分
         }
 
         # 1. 距离算分
@@ -221,6 +233,12 @@ class PathEvaluator:
             p1 = path_points[i]
             p2 = path_points[i+1]
             
+
+            pitch = self.calculate_pitch_angle(p1, p2)
+            if pitch > self.params.get('max_pitch_angle', 45.0):
+                # 累加惩罚：超出越多，惩罚越狠 (二次方惩罚)
+                details['pitch_violation'] += self.penalties.get('pitch_violation', 20000.0) * ((pitch - 45.0) / 10.0)
+
             if self.env.is_segment_collision(p1, p2, safe_margin=0.0):
                 details['fatal_collision'] += fatal_penalty
                 continue 

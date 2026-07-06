@@ -34,7 +34,6 @@ def run_parameter_tuning_loop():
     
     # 你只需修改这里！想测谁，就改成谁的名字
     TARGET_ALGO = "GWO"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
-    # ==========================================
     
     print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
@@ -44,7 +43,7 @@ def run_parameter_tuning_loop():
     # ==========================================
     kwargs = {
         'evaluator': evaluator,
-        # 【核心修正】：3D 地图有 11 个打卡点，控制点必须大于 11，这里设为 16！
+        # 3D 地图有 11 个打卡点，控制点必须大于 11，这里设为 16
         'num_waypoints': 16, 
         'max_iter': agent.algo_params['max_iter']
     }

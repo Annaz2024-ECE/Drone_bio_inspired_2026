@@ -31,7 +31,7 @@ class CoordinatorAgent:
         # ==========================================
         improvement = self.last_score - total_score
         if self.last_score == float('inf'):
-            improvement_rate = 1.0  
+            improvement_rate = 0.05  
         else:
             improvement_rate = max(0, improvement) / (self.last_score + 1e-8) 
             
@@ -43,8 +43,8 @@ class CoordinatorAgent:
                              details.get('sharp_turn', 0) == 0 and
                              details.get('altitude_violation', 0) == 0) # 必须不能遁地或冲天
         
-        if is_perfectly_safe and (self.meta_iteration > 1) and (improvement_rate < 0.01):
-            print(f"   [全局通知] 3D 航线已绝对安全，且收敛至极限(进步率 < 1%)，申请提前结束")
+        if is_perfectly_safe and (self.meta_iteration > 1) and (improvement_rate < 0.005):
+            print(f"   [全局通知] 3D 航线已绝对安全，且收敛至极限(进步率 < 0.5%)，申请提前结束")
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished
 
@@ -100,7 +100,7 @@ class CoordinatorAgent:
         else:
             self.stuck_counter = 0
             # 如果没有撞墙/漏打卡，且重力惩罚大于 1500 (约等于平均高度超过 6-7 米)
-            
+
         is_safe_but_high = (not is_failing) and (details.get('gravity_cost', 0) > 1500)
 
         if is_safe_but_high and current_algo == "GWO":
