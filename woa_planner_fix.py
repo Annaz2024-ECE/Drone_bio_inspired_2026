@@ -1,11 +1,8 @@
 import numpy as np
-import math
-import random
-import matplotlib.pyplot as plt
 from base_planner import BasePlanner
 
 class WOAPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_waypoints=12, pop_size=60, max_iter=200):
+    def __init__(self, evaluator=None, num_waypoints=20, pop_size=60, max_iter=200):
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
         self.pop_size = pop_size
@@ -66,19 +63,19 @@ class WOAPlanner(BasePlanner):
                 self.historical_best_pos = self.positions[i, :].copy()
 
         for t in range(self.max_iter):
-            a = 2.0 * math.cos((math.pi * t) / (2 * self.max_iter))
+            a = 2.0 * np.cos((np.pi * t) / (2 * self.max_iter))
             
             for i in range(self.pop_size):
-                r1, r2 = random.random(), random.random()
+                r1, r2 = np.random.random(), np.random.random()
                 A = 2.0 * a * r1 - a
                 C = 2.0 * r2
-                p = random.random()
+                p = np.random.random()
                 b = 1.0
-                l = random.uniform(-1, 1)
+                l = np.random.uniform(-1, 1)
 
                 if p < 0.5:
                     if abs(A) >= 1:
-                        rand_idx = random.randint(0, self.pop_size - 1)
+                        rand_idx = np.random.randint(0, self.pop_size)
                         rand_pos = self.positions[rand_idx, :]
                         D_x_rand = abs(C * rand_pos - self.positions[i, :])
                         new_pos = rand_pos - A * D_x_rand
@@ -87,7 +84,7 @@ class WOAPlanner(BasePlanner):
                         new_pos = self.historical_best_pos - A * D_Leader
                 else:
                     D_Leader = abs(self.historical_best_pos - self.positions[i, :])
-                    new_pos = D_Leader * math.exp(b * l) * math.cos(2 * math.pi * l) + self.historical_best_pos
+                    new_pos = D_Leader * np.exp(b * l) * np.cos(2 * np.pi * l) + self.historical_best_pos
 
                 # 3. 【修改】直接使用基类的 self.lb 和 self.ub 进行裁剪
                 clipped_pos = np.clip(new_pos, self.lb, self.ub)
@@ -121,7 +118,7 @@ class WOAPlanner(BasePlanner):
 
 if __name__ == "__main__":
     # 建议航点数至少大于等于目标区域数量 (haining.json5 中有 11 个 target)
-    planner = WOAPlanner(num_waypoints=30, pop_size=60, max_iter=200)
+    planner = WOAPlanner(num_waypoints=20, pop_size=60, max_iter=200)
     
     best_path, convergence_history = planner.optimize()
     
