@@ -14,7 +14,7 @@ class PathEvaluator:
         self.penalties = {
             'fatal_collision': 1000000.0,  
             'missed_target_base': 500000.0,     
-            'missed_target_factor': 20000.0,      
+            'missed_target_factor': 1.0,      
             'sharp_turn': 10000.0,         
             'margin_violation': 5000.0,     
             'altitude_violation': 50000.0,
@@ -165,8 +165,8 @@ class PathEvaluator:
             if min_missed_dist > 0.1: 
                 # 动态读取惩罚值，如果没有被 Agent 修改，就默认使用你的阶梯惩罚
                 base_pen = self.penalties.get('missed_target_base', 500000.0)
-                factor_pen = self.penalties.get('missed_target_factor', 20000.0)
-                total_target_penalty += base_pen + (min_missed_dist * factor_pen)
+                factor_pen = self.penalties.get('missed_target_factor', 1.0)
+                total_target_penalty += base_pen + ((min_missed_dist ** 2.0) * 20000.0)
                 
         return total_target_penalty
 
