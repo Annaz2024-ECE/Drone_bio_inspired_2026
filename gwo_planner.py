@@ -122,6 +122,11 @@ class GWOPlanner(BasePlanner):
             mutation_rate = 0.2  # 选取 20% 的灰狼进行变异，充当敢死队去探路
             # 变异步长随迭代衰减：前期大范围扰动找缺口(20%边界跨度)，后期小范围平滑微调
             mutation_scale = 0.2 * (1.0 - l / self.max_iter) 
+
+            is_emergency = getattr(self, 'emergency_escape', False)
+            if is_emergency:
+                mutation_rate = 0.5  # 卡死时，扩大敢死队规模到 50%
+                mutation_scale = 0.5 # 极度放大水平面的乱窜范围（实现“试着拐弯”）
             
             # 随机生成掩码，决定哪些狼变异
             do_mutation = np.random.rand(self.num_wolves) < mutation_rate
@@ -132,6 +137,13 @@ class GWOPlanner(BasePlanner):
             
             # 生成围绕 Alpha 狼的高斯扰动噪声
             noise = np.random.randn(self.num_wolves, self.dim) * (self.ub - self.lb) * mutation_scale
+
+            # 如果是紧急逃逸，强制给予物理维度的向上推力（实现“试着往上飞”）
+            if is_emergency:
+                # 遍历所有控制点的 Z 轴 (数组结构: x1,y1,z1, x2,y2,z2... Z的索引是 2, 5, 8...)
+                for d in range(2, self.dim, 3): 
+                    noise[:, d] += 15.0 # 强制向上方拉升 15 米！
+                    
             mutated_pos = self.alpha_pos + noise
             
             # 应用变异：只更新被选中的那 20% 的狼，其余 80% 依然遵循原本的 GWO 包围机制

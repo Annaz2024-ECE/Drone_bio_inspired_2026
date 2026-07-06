@@ -21,6 +21,7 @@ class CoordinatorAgent:
         actions_taken = []
         specific_params = {} 
         is_finished = False 
+        specific_params['emergency_escape'] = False # 默认关闭逃逸模式
         
         print(f"\n[调参] 第 {self.meta_iteration} 轮诊断中... (负责压榨 {current_algo} 的极限)")
 
@@ -90,6 +91,10 @@ class CoordinatorAgent:
                 elif current_algo == "WOA":
                     specific_params['a'] = 2.0     # 强制重置鲸鱼的攻击圈大小
                     actions_taken.append("EMERGENCY_WOA: 扩大搜寻气泡网，寻找上方突围路径")
+
+                elif current_algo == "GWO":
+                    specific_params['emergency_escape'] = True
+                    actions_taken.append("EMERGENCY_GWO: 激活紧急逃逸！向敢死队注入强力上升气流与转向基因！")
                     
         else:
             self.stuck_counter = 0
@@ -143,6 +148,15 @@ class CoordinatorAgent:
             if details.get('missed_target', 0) > 0:
                 actions_taken.append("TUNE_WOA: 激活外环资源，加派鲸鱼数量寻找目标")
 
+        # 混合算法专属调参逻辑
+        elif current_algo == "HybridPSOGWO":
+            if self.stuck_counter >= 1 or details.get('missed_target', 0) > 0:
+                specific_params['pso_ratio'] = 0.5  # 增加 PSO 探路比例
+                actions_taken.append("TUNE_HYBRID: 延长 PSO 探路阶段比例至 50%，加强全局 3D 视野突围搜索")
+            if details.get('smoothness', 0) > 2000 and details.get('fatal_collision', 0) == 0:
+                specific_params['pso_ratio'] = 0.1  # 减少探路，增加平滑打磨
+                actions_taken.append("TUNE_HYBRID: 缩短探路，将 90% 的算力交给 GWO 灰狼进行极致平滑包围")
+
         # ==========================================
         # 2. 共性参数宏观调控 (Macro-management)
         # ==========================================
@@ -155,7 +169,7 @@ class CoordinatorAgent:
                 self.algo_params['max_iter'] += 50
                 actions_taken.append("MACRO: INCREASE_MAX_ITER (延长规避计算工期)")
 
-        # 【修改4：将 Chaikin 平滑调控改为 B-Spline 点数调控】
+        # 将 Chaikin 平滑调控改为 B-Spline 点数调控
         if details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000:
             if self.eval_params.get('bspline_num_points', 100) < 150:
                 self.eval_params['bspline_num_points'] += 10
