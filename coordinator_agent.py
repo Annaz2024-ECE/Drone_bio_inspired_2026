@@ -114,7 +114,12 @@ class CoordinatorAgent:
         elif current_algo == "PSO":
             if details.get('missed_target', 0) > 0:
                 specific_params['w_max'] = 0.99
-                actions_taken.append("TUNE_PSO: 提高最大惯性权重 w_max=0.99, 强制粒子向外乱窜探索高度")
+                actions_taken.append("TUNE_PSO: 提高最大惯性权重 w_max=0.99, 强制粒子向外乱窜")
+                
+                # 动态修改物理评价法则, 为 PSO 铺设平滑下山路
+                self.eval_params['missed_target_base'] = 0.0       # 取消阶梯断崖
+                self.eval_params['missed_target_factor'] = 50000.0 # 增强线性斜率牵引
+                actions_taken.append("MACRO: 针对 PSO 的梯度依赖性，抹除漏打卡断崖，改为纯线性平滑引导！")
             if details.get('smoothness', 0) > 2000:
                 specific_params['c1'] = 2.2  
                 specific_params['c2'] = 1.0

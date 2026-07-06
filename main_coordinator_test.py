@@ -8,7 +8,7 @@ from dsaco_planner import DSACOPlanner
 from pso_planner import PSOPlanner
 from gwo_planner import GWOPlanner
 from ssa_planner import SSAPlanner
-from woa_planner import WOAPlanner
+from woa_planner_fix import WOAPlanner
 from hybrid_pso_gwo import HybridPSOGWO
 
 def run_parameter_tuning_loop():
