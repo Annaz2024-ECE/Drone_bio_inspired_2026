@@ -32,8 +32,10 @@ class PSOPlanner(BasePlanner):
         # 记录个体最优和全局最优
         self.pbest_pos = np.copy(self.particles)
         self.pbest_scores = np.full(self.num_particles, np.inf)
-        self.gbest_pos = np.zeros(self.dim)
-        self.gbest_score = np.inf
+        
+        # 【核心修改】：废除原有的 gbest，使用 historical_best 完美对接老中医，实现跨轮次记忆！
+        self.historical_best_pos = np.zeros(self.dim)
+        self.historical_best_score = np.inf
 
     def _initialize_particles(self):
         """ 
@@ -110,16 +112,26 @@ class PSOPlanner(BasePlanner):
         return particles
 
     def optimize(self):
-        print("开始 3D PSO 粒子群算法路径规划 (带多目标锚固与限速保护)...")
+        print("开始 3D PSO 粒子群算法路径规划 (带多目标锚固、限速与历史最优保护)...")
         
-        # 初始评估
+        # 初始评估 (适应调参大脑的多轮重入，强制刷新 pbest 的真实得分)
         for i in range(self.num_particles):
+            # 如果不是第一轮，老中医可能修改了规则，过去的 pbest_score 已作废，必须按新规则重算！
+            if self.pbest_scores[i] != np.inf:
+                true_pbest_score, _, _ = self.evaluator.evaluate_pso_particle(self._decode_path(self.pbest_pos[i]))
+                self.pbest_scores[i] = true_pbest_score
+                
             full_path = self._decode_path(self.particles[i])
             score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
-            self.pbest_scores[i] = score
-            if score < self.gbest_score:
-                self.gbest_score = score
-                self.gbest_pos = np.copy(self.particles[i])
+            
+            if score < self.pbest_scores[i]:
+                self.pbest_scores[i] = score
+                self.pbest_pos[i] = np.copy(self.particles[i])
+                
+            # 记录历史最优
+            if score < self.historical_best_score:
+                self.historical_best_score = score
+                self.historical_best_pos = np.copy(self.particles[i])
                 
         for iteration in range(self.max_iter):
             w_current = self.w_max - (self.w_max - self.w_min) * (iteration / self.max_iter)
@@ -129,10 +141,10 @@ class PSOPlanner(BasePlanner):
                 r2 = np.random.rand(self.dim)
                 
                 cognitive = self.c1 * r1 * (self.pbest_pos[i] - self.particles[i])
-                social = self.c2 * r2 * (self.gbest_pos - self.particles[i])
-                self.velocities[i] = w_current * self.velocities[i] + cognitive + social
+                # 【核心修改】：社会向心力追随 historical_best
+                social = self.c2 * r2 * (self.historical_best_pos - self.particles[i])
                 
-                # 【核心修复：独立维度限速】使用 v_max_arr，大幅压缩 Z 轴的无效速度震荡
+                self.velocities[i] = w_current * self.velocities[i] + cognitive + social
                 self.velocities[i] = np.clip(self.velocities[i], -self.v_max_arr, self.v_max_arr)
                 
                 self.particles[i] += self.velocities[i]
@@ -144,16 +156,16 @@ class PSOPlanner(BasePlanner):
                 if score < self.pbest_scores[i]:
                     self.pbest_scores[i] = score
                     self.pbest_pos[i] = np.copy(self.particles[i])
-                if score < self.gbest_score:
-                    self.gbest_score = score
-                    self.gbest_pos = np.copy(self.particles[i])
+                if score < self.historical_best_score:
+                    self.historical_best_score = score
+                    self.historical_best_pos = np.copy(self.particles[i])
                     
-            self.convergence_curve.append(self.gbest_score)
+            self.convergence_curve.append(self.historical_best_score)
             
             if (iteration + 1) % 50 == 0 or iteration == 0:
-                print(f"  > 迭代 {iteration+1:03d}/{self.max_iter} | 全局最优得分: {self.gbest_score:,.2f}")
+                print(f"  > 迭代 {iteration+1:03d}/{self.max_iter} | 历史最优得分: {self.historical_best_score:,.2f}")
                 
-        return self._decode_path(self.gbest_pos), self.convergence_curve
+        return self._decode_path(self.historical_best_pos), self.convergence_curve
 
 # ===================== 修改后的主函数（10次循环保存） =====================
 if __name__ == "__main__":

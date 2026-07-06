@@ -28,7 +28,7 @@ class SSAPlanner(BasePlanner):
         self.sparrows = self._initialize_sparrows()
         self.fitness = np.full(num_sparrows, np.inf)
         
-        self.gbest_pos = np.zeros(self.dim)
+        self.historical_best_pos = np.zeros(self.dim)
         self.gbest_score = np.inf
 
     def _initialize_sparrows(self):
@@ -117,7 +117,7 @@ class SSAPlanner(BasePlanner):
             self.fitness[i], _, _ = self.evaluator.evaluate_pso_particle(full_path)
             if self.fitness[i] < self.gbest_score:
                 self.gbest_score = self.fitness[i]
-                self.gbest_pos = np.copy(self.sparrows[i])
+                self.historical_best_pos = np.copy(self.sparrows[i])
         
         for iteration in range(self.max_iter):
             sort_indices = np.argsort(self.fitness)
@@ -170,14 +170,14 @@ class SSAPlanner(BasePlanner):
                 
                 if score < self.gbest_score:
                     self.gbest_score = score
-                    self.gbest_pos = np.copy(new_sparrows[i])
+                    self.historical_best_pos = np.copy(new_sparrows[i])
             
             self.convergence_curve.append(self.gbest_score)
             
             if (iteration + 1) % 20 == 0 or iteration == 0:
                 print(f"  > 迭代 {iteration+1:03d}/{self.max_iter} | 全局最优得分: {self.gbest_score:,.2f}")
         
-        return self._decode_path(self.gbest_pos), self.convergence_curve
+        return self._decode_path(self.historical_best_pos), self.convergence_curve
         
 if __name__ == "__main__":
     planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=80, max_iter=200, num_waypoints=30)
