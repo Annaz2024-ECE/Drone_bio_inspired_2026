@@ -8,7 +8,7 @@ import scipy.interpolate as spl
 class PathEvaluator:
     def __init__(self):
         # 实例化3D环境
-        self.env = UAVEnvironment3D('maps/haining.json5')
+        self.env = UAVEnvironment3D('maps/zijingang.json5')
         
         # 基础惩罚权重
         self.penalties = {
@@ -223,17 +223,21 @@ class PathEvaluator:
             if pt[1] < self.env.y_bounds[0] or pt[1] > self.env.y_bounds[1]:
                 details['boundary_violation'] += bound_penalty
             
-            # 重力能耗惩罚 (飞行高度越高，耗电越多)
-            # 假设无人机每升高 1 米，每个控制点增加 15 分的惩罚
-            # 这就形成了一个向下拉扯的“引力场”，防止无人机无脑拔高
-            if pt[2] > 0:
-                details['gravity_cost'] += pt[2] * 15.0
 
         for i in range(len(path_points) - 1):
             p1 = path_points[i]
             p2 = path_points[i+1]
             
+            # 物理线段积分法 (能耗 = 航段长度 × 平均高度)
+            segment_dist = np.linalg.norm(p2 - p1)
+            avg_height = (p1[2] + p2[2]) / 2.0
+            
+            if avg_height > 0:
+                # 无论线段被切得多碎，这段物理距离的积分面积永远恒定！
+                # 乘以 1.5 是为了让分数规模和以前保持在同一个数量级
+                details['gravity_cost'] += avg_height * segment_dist * 1.5
 
+            # 每段飞行路线的物理俯仰角检测 (保持你之前的代码不变)
             pitch = self.calculate_pitch_angle(p1, p2)
             if pitch > self.params.get('max_pitch_angle', 45.0):
                 # 累加惩罚：超出越多，惩罚越狠 (二次方惩罚)
