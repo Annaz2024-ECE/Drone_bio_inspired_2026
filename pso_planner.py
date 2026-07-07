@@ -114,7 +114,7 @@ class PSOPlanner(BasePlanner):
     def optimize(self):
         print("开始 3D PSO 粒子群算法路径规划 (带多目标锚固、限速与历史最优保护)...")
         
-        # 初始评估 (适应调参大脑的多轮重入，强制刷新 pbest 的真实得分)
+        # 1. 初始评估 (适应调参大脑的多轮重入，强制刷新 pbest 的真实得分)
         for i in range(self.num_particles):
             # 如果不是第一轮，老中医可能修改了规则，过去的 pbest_score 已作废，必须按新规则重算！
             if self.pbest_scores[i] != np.inf:
@@ -132,16 +132,17 @@ class PSOPlanner(BasePlanner):
             if score < self.historical_best_score:
                 self.historical_best_score = score
                 self.historical_best_pos = np.copy(self.particles[i])
-                
+
+        # 2.
         for iteration in range(self.max_iter):
             w_current = self.w_max - (self.w_max - self.w_min) * (iteration / self.max_iter)
             
+            # 更新粒子速度和位置
             for i in range(self.num_particles):
                 r1 = np.random.rand(self.dim)
                 r2 = np.random.rand(self.dim)
                 
                 cognitive = self.c1 * r1 * (self.pbest_pos[i] - self.particles[i])
-                # 【核心修改】：社会向心力追随 historical_best
                 social = self.c2 * r2 * (self.historical_best_pos - self.particles[i])
                 
                 self.velocities[i] = w_current * self.velocities[i] + cognitive + social
@@ -150,6 +151,7 @@ class PSOPlanner(BasePlanner):
                 self.particles[i] += self.velocities[i]
                 self.particles[i] = np.clip(self.particles[i], self.lb, self.ub)
                 
+                # 评估新位置
                 full_path = self._decode_path(self.particles[i])
                 score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
                 
@@ -160,6 +162,42 @@ class PSOPlanner(BasePlanner):
                     self.historical_best_score = score
                     self.historical_best_pos = np.copy(self.particles[i])
                     
+            # ==========================================
+            # 接收老中医的“雷达引导”指令 (靶向变异)
+            # ==========================================
+            is_radar = getattr(self, 'radar_guidance', False)
+            if is_radar:
+                # 1. 提取出所有的 3D 目标点 (只在 Z 轴居中)
+                targets_3d = []
+                for t in self.env.target_areas:
+                    z_mid = (t.get('z_min', 0.0) + t.get('z_max', 10.0)) / 2.0
+                    targets_3d.append(np.array([t['center'][0], t['center'][1], z_mid]))
+                
+                # 2. 选出 10% 的“敢死队粒子”
+                mutation_rate = 0.1
+                do_mutation = np.random.rand(self.num_particles) < mutation_rate
+                
+                # 保护历史表现最好的那个粒子不被乱动
+                best_idx = np.argmin(self.pbest_scores)
+                do_mutation[best_idx] = False 
+                
+                # 3. 让敢死队粒子直接“跃迁空降”到目标点附近！
+                for i in range(self.num_particles):
+                    if do_mutation[i]:
+                        new_pos = np.zeros((self.num_waypoints, 3))
+                        # 循环把控制点强行摁在目标上
+                        if len(targets_3d) > 0:
+                            for j in range(self.num_waypoints):
+                                new_pos[j] = targets_3d[j % len(targets_3d)]
+                        
+                        # 加上一点点随机扰动，防止大家都叠在同一个点上
+                        noise = np.random.randn(self.num_waypoints, 3) * 2.0
+                        new_pos += noise
+                        
+                        self.particles[i] = np.clip(new_pos.flatten(), self.lb, self.ub)
+                        self.velocities[i] = 0.0 # 速度清零，从目标点重新起步，探索斜坡！
+            # ==========================================
+
             self.convergence_curve.append(self.historical_best_score)
             
             if (iteration + 1) % 50 == 0 or iteration == 0:
@@ -181,7 +219,7 @@ if __name__ == "__main__":
         planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=30)
         best_path, history = planner.optimize()
         
-        planner.evaluator.debug_target_coverage(best_path)
+
         planner.plot_result(best_path, history, algo_name="PSO-3D", run_idx=run_idx, save_dir=save_dir)
         
         final_score = history[-1] if history else None
