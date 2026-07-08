@@ -163,39 +163,88 @@ class PSOPlanner(BasePlanner):
                     self.historical_best_pos = np.copy(self.particles[i])
                     
             # ==========================================
-            # 接收老中医的“雷达引导”指令 (靶向变异)
+            # 接收老中医的四大通用物理指令 (Universal API)
             # ==========================================
             is_radar = getattr(self, 'radar_guidance', False)
-            if is_radar:
-                # 1. 提取出所有的 3D 目标点 (只在 Z 轴居中)
-                targets_3d = []
-                for t in self.env.target_areas:
-                    z_mid = (t.get('z_min', 0.0) + t.get('z_max', 10.0)) / 2.0
-                    targets_3d.append(np.array([t['center'][0], t['center'][1], z_mid]))
+            is_emergency = getattr(self, 'emergency_escape', False)
+            is_lift_up = getattr(self, 'lift_up', False)
+            is_press_down = getattr(self, 'press_down', False)
+
+            # 只要触发了任何一个全局动作，就启动底层基因干预
+            if is_radar or is_emergency or is_lift_up or is_press_down:
                 
-                # 2. 选出 10% 的“敢死队粒子”
                 mutation_rate = 0.1
+                if is_emergency: mutation_rate = 0.5
+                elif is_lift_up: mutation_rate = 0.4
+                elif is_press_down: mutation_rate = 0.3
+                
                 do_mutation = np.random.rand(self.num_particles) < mutation_rate
                 
-                # 保护历史表现最好的那个粒子不被乱动
+                # 绝对保护：保留历史最优粒子，留下革命火种
                 best_idx = np.argmin(self.pbest_scores)
                 do_mutation[best_idx] = False 
                 
-                # 3. 让敢死队粒子直接“跃迁空降”到目标点附近！
+                # 1. 雷达空投逻辑
+                if is_radar:
+                    targets_3d = []
+                    for t in self.env.target_areas:
+                        z_mid = (t.get('z_min', 0.0) + t.get('z_max', 10.0)) / 2.0
+                        targets_3d.append(np.array([t['center'][0], t['center'][1], z_mid]))
+                    
+                    for i in range(self.num_particles):
+                        if do_mutation[i]:
+                            new_pos = np.zeros((self.num_waypoints, 3))
+                            if len(targets_3d) > 0:
+                                for j in range(self.num_waypoints):
+                                    new_pos[j] = targets_3d[j % len(targets_3d)]
+                            
+                            noise = np.random.randn(self.num_waypoints, 3) * 2.0
+                            self.particles[i] = np.clip((new_pos + noise).flatten(), self.lb, self.ub)
+                            
+                            # 【核心斩断橡皮筋】：清零速度并强制洗脑 pbest
+                            self.velocities[i] = 0.0 
+                            full_path = self._decode_path(self.particles[i])
+                            score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                            self.pbest_scores[i] = score
+                            self.pbest_pos[i] = np.copy(self.particles[i])
+                
+                # 2. 物理推力逻辑 (Z轴强制位移)
+                else:
+                    noise = np.zeros((self.num_particles, self.dim))
+                    if is_emergency:
+                        for d in range(2, self.dim, 3): noise[:, d] = 15.0 
+                    elif is_lift_up:
+                        for d in range(2, self.dim, 3): noise[:, d] = 8.0  
+                    elif is_press_down:
+                        for d in range(2, self.dim, 3): noise[:, d] = -3.0 
+                    
+                    for i in range(self.num_particles):
+                        if do_mutation[i]:
+                            self.particles[i] += noise[i]
+                            self.particles[i] = np.clip(self.particles[i], self.lb, self.ub)
+                            
+                            # 【核心斩断橡皮筋】：清零速度并强制洗脑 pbest
+                            self.velocities[i] = 0.0 
+                            full_path = self._decode_path(self.particles[i])
+                            score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                            self.pbest_scores[i] = score
+                            self.pbest_pos[i] = np.copy(self.particles[i])
+
+                # 3. 动作结束后，二次检查是否诞生了新的全局最优
                 for i in range(self.num_particles):
-                    if do_mutation[i]:
-                        new_pos = np.zeros((self.num_waypoints, 3))
-                        # 循环把控制点强行摁在目标上
-                        if len(targets_3d) > 0:
-                            for j in range(self.num_waypoints):
-                                new_pos[j] = targets_3d[j % len(targets_3d)]
-                        
-                        # 加上一点点随机扰动，防止大家都叠在同一个点上
-                        noise = np.random.randn(self.num_waypoints, 3) * 2.0
-                        new_pos += noise
-                        
-                        self.particles[i] = np.clip(new_pos.flatten(), self.lb, self.ub)
-                        self.velocities[i] = 0.0 # 速度清零，从目标点重新起步，探索斜坡！
+                    if self.pbest_scores[i] < self.historical_best_score:
+                        self.historical_best_score = self.pbest_scores[i]
+                        self.historical_best_pos = np.copy(self.pbest_pos[i])
+
+                # ==========================================
+                # 【极其关键】：阅后即焚！
+                # 执行完一次老中医的“冲量”干预后，必须立刻销毁指令，
+                # 否则后续代数粒子会被无限次拔高飞入太空！
+                # ==========================================
+                self.radar_guidance = False
+                self.emergency_escape = False
+                self.lift_up = False
+                self.press_down = False
             # ==========================================
 
             self.convergence_curve.append(self.historical_best_score)

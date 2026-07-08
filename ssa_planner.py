@@ -162,8 +162,6 @@ class SSAPlanner(BasePlanner):
                 score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
                 
                 # 【核心修复3：贪婪选择 (Greedy Selection)】
-                # 只有新位置得分更低（更好），才允许麻雀移动！
-                # 彻底杜绝原本 SSA “强行把完美路线跳废” 的自杀行为
                 if score <= self.fitness[i]:
                     self.sparrows[i] = new_sparrows[i]
                     self.fitness[i] = score
@@ -171,6 +169,85 @@ class SSAPlanner(BasePlanner):
                 if score < self.historical_best_score:
                     self.historical_best_score = score
                     self.historical_best_pos = np.copy(new_sparrows[i])
+
+            # ==========================================
+            # 接收老中医的四大通用物理指令 (Universal API)
+            # ==========================================
+            is_radar = getattr(self, 'radar_guidance', False)
+            is_emergency = getattr(self, 'emergency_escape', False)
+            is_lift_up = getattr(self, 'lift_up', False)
+            is_press_down = getattr(self, 'press_down', False)
+
+            # 只要触发了全局动作，就启动底层基因强行干预（无视贪婪法则）
+            if is_radar or is_emergency or is_lift_up or is_press_down:
+                
+                mutation_rate = 0.1
+                if is_emergency: mutation_rate = 0.5
+                elif is_lift_up: mutation_rate = 0.4
+                elif is_press_down: mutation_rate = 0.3
+                
+                do_mutation = np.random.rand(self.num_sparrows) < mutation_rate
+                
+                # 绝对保护：保留历史最优的那只麻雀，留下革命火种
+                best_idx = np.argmin(self.fitness)
+                do_mutation[best_idx] = False 
+                
+                # 1. 雷达空投逻辑
+                if is_radar:
+                    targets_3d = []
+                    for t in self.env.target_areas:
+                        z_mid = (t.get('z_min', 0.0) + t.get('z_max', 10.0)) / 2.0
+                        targets_3d.append(np.array([t['center'][0], t['center'][1], z_mid]))
+                    
+                    for i in range(self.num_sparrows):
+                        if do_mutation[i]:
+                            new_pos = np.zeros((self.num_waypoints, 3))
+                            if len(targets_3d) > 0:
+                                for j in range(self.num_waypoints):
+                                    new_pos[j] = targets_3d[j % len(targets_3d)]
+                            
+                            noise = np.random.randn(self.num_waypoints, 3) * 2.0
+                            self.sparrows[i] = np.clip((new_pos + noise).flatten(), self.lb, self.ub)
+                            
+                            # 【核心斩断贪婪陷阱】：无视分数变差，强行更新肉体记忆
+                            full_path = self._decode_path(self.sparrows[i])
+                            self.fitness[i], _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                
+                # 2. 物理推力逻辑 (Z轴强制位移)
+                else:
+                    noise = np.zeros((self.num_sparrows, self.dim))
+                    if is_emergency:
+                        for d in range(2, self.dim, 3): noise[:, d] = 15.0 
+                    elif is_lift_up:
+                        for d in range(2, self.dim, 3): noise[:, d] = 8.0  
+                    elif is_press_down:
+                        for d in range(2, self.dim, 3): noise[:, d] = -3.0 
+                    
+                    for i in range(self.num_sparrows):
+                        if do_mutation[i]:
+                            self.sparrows[i] += noise[i]
+                            self.sparrows[i] = np.clip(self.sparrows[i], self.lb, self.ub)
+                            
+                            # 【核心斩断贪婪陷阱】：无视分数变差，强行更新肉体记忆
+                            full_path = self._decode_path(self.sparrows[i])
+                            self.fitness[i], _, _ = self.evaluator.evaluate_pso_particle(full_path)
+
+                # 3. 动作结束后，二次检查是否诞生了新的历史最优
+                for i in range(self.num_sparrows):
+                    if self.fitness[i] < self.historical_best_score:
+                        self.historical_best_score = self.fitness[i]
+                        self.historical_best_pos = np.copy(self.sparrows[i])
+                        
+                # ==========================================
+                # 【极其关键】：阅后即焚！
+                # 执行完一次老中医的“冲量”干预后，必须立刻销毁指令
+                # 否则后续代数麻雀会被无限次拔高或压低！
+                # ==========================================
+                self.radar_guidance = False
+                self.emergency_escape = False
+                self.lift_up = False
+                self.press_down = False
+            # ==========================================
             
             self.convergence_curve.append(self.historical_best_score)
             

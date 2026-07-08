@@ -149,7 +149,7 @@ class UAVEnvironment3D:
         # 调整3D视角比例，避免Z轴被拉伸得太夸张
         ax.set_box_aspect([1, 1, 0.4]) 
         
-        ax.set_title('ZJU Haining Campus - 3D UAV Environment', fontsize=14, fontweight='bold')
+        ax.set_title(f'{self.name} - 3D UAV Environment', fontsize=14, fontweight='bold')
         ax.set_xlabel('X Coordinate')
         ax.set_ylabel('Y Coordinate')
         ax.set_zlabel('Altitude (Z)')
