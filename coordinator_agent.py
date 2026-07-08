@@ -1,49 +1,35 @@
 class CoordinatorAgent:
     def __init__(self):
-        # 1. 算法共性参数管理 (算力预算)
         self.algo_params = {'pop_size': 50, 'max_iter': 100}
-        
-        # 2. 评价器物理参数管理 (物理规则)
         self.eval_params = {
             'bspline_num_points': 100, 
             'min_waypoint_dist': 5.0,
-            'max_turn_angle': 120.0  # 🔥 新增：把转弯限制纳入老中医的调控范围
+            'max_turn_angle': 120.0  
         }
-
-        # 3. 核心监控指标
         self.meta_iteration = 0
         self.stuck_counter = 0
         self.last_score = float('inf')
 
-
     def analyze_and_act(self, total_score, details, env_info, current_algo):
-        """
-        六大算法全解锁的【终极 3D 调参大脑】(物理启发式升级版)
-        """
         self.meta_iteration += 1
         actions_taken = []
         specific_params = {} 
         is_finished = False 
         
-        # 全局物理行为指令 (Universal Directives)
-        # 任何算法只要探测到这些指令为 True，就可以执行对应的物理动作
+        # 物理指令保留（因为这涉及复杂的 3D 坐标操作，需要底层的雷达/下压接收器配合）
         specific_params['emergency_escape'] = False 
         specific_params['radar_guidance'] = False
-        specific_params['press_down'] = False       # 向下试探 (省电)
-        specific_params['lift_up'] = False          # 向上拉升 (避障)
+        specific_params['press_down'] = False       
+        specific_params['lift_up'] = False          
         
         print(f"\n[调参] 第 {self.meta_iteration} 轮诊断中... (负责压榨 {current_algo} 的极限)")
 
-        # ==========================================
-        # 0. 收敛极限与早停判定 
-        # ==========================================
         improvement = self.last_score - total_score
         if self.last_score == float('inf'):
-            improvement_rate = 0.05 #可搭建桥梁让llm/仿生优化智能体调节  
+            improvement_rate = 0.05  
         else:
             improvement_rate = max(0, improvement) / (self.last_score + 1e-8) 
-            
-        self.last_score = total_score 
+            self.last_score = total_score 
 
         is_perfectly_safe = (details.get('fatal_collision', 0) == 0 and 
                              details.get('missed_target', 0) == 0 and
@@ -55,22 +41,6 @@ class CoordinatorAgent:
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished
 
-        ideal_dist = env_info.get('ideal_distance', 100.0)
-        obs_count = env_info.get('obstacle_count', 0)
-        dynamic_tolerance = 1.0 + (obs_count * 0.005)
-        max_allowed_dist = ideal_dist * dynamic_tolerance
-        
-        if is_perfectly_safe and details.get('distance', 0) > max_allowed_dist:
-            print(f"  [警告] 路线安全，但总航程 {details.get('distance'):.1f}m 超过动态底线，存在绕路")
-            if current_algo == "PSO":
-                specific_params['c2'] = 1.0 
-            elif current_algo in ["ACO", "DSACO"]:
-                specific_params['beta'] = 6.0 
-            elif current_algo == "SSA":
-                specific_params['ST'] = 0.9 
-            actions_taken.append(f"TUNE_{current_algo}: 降低探索欲，强行拉直航线以缩短距离")
-
-        # 判定卡壳
         is_failing = (details.get('fatal_collision', 0) > 0 or 
                       details.get('missed_target', 0) > 0 or
                       details.get('altitude_violation', 0) > 0 or
@@ -83,62 +53,81 @@ class CoordinatorAgent:
             self.stuck_counter = 0
 
         # ==========================================
-        #  1. 通用物理维度全局引导 (Universal Physical Guidance)
+        # 通用物理避障/雷达/压低指令 
         # ==========================================
-        
-        # 1.1 撞墙避障逻辑：尝试拉升高度 + 放宽转弯限制
         if details.get('fatal_collision', 0) > 0:
             specific_params['lift_up'] = True
-            self.eval_params['max_turn_angle'] = 150.0 # 放宽物理规则：允许150度急转弯来躲避大楼
-            actions_taken.append("UNIVERSAL: 遭遇建筑碰撞！下达全局 [紧急拉升] 指令，并放宽最大转弯角至 150° 以利于规避")
+            self.eval_params['max_turn_angle'] = 150.0 
+            actions_taken.append("UNIVERSAL: 遭遇建筑碰撞！下达全局 [紧急拉升] 指令，放宽转弯限制")
         else:
-            self.eval_params['max_turn_angle'] = 120.0 # 没撞墙就恢复正常平滑转弯
+            self.eval_params['max_turn_angle'] = 120.0 
 
-        # 1.2 高度省电逻辑：如果绝对安全，但飞得太高，引导下压
         is_safe_but_high = is_perfectly_safe and (details.get('gravity_cost', 0) > 1500)
         if is_safe_but_high:
             specific_params['press_down'] = True
-            actions_taken.append("UNIVERSAL: 航线绝对安全但能耗过高，下达全局 [贴地压低] 指令，试探安全底线")
+            actions_taken.append("UNIVERSAL: 航线安全但能耗高，下达全局 [贴地压低] 指令")
 
-        # 1.3 漏打卡逻辑：如果漏打卡，直接全局广播雷达空投引导
         if details.get('missed_target', 0) > 0:
             specific_params['radar_guidance'] = True 
-            actions_taken.append("UNIVERSAL: 偏离打卡点！激活全系统 [雷达空投] 机制，引导敢死队向目标跃迁")
+            actions_taken.append("UNIVERSAL: 偏离打卡点！激活全系统 [雷达空投] 机制")
 
-        # 2. 算法专属参数微操 (仅调整算法自身的数学参数)
-        if current_algo in ["ACO", "DSACO"]:
-            if self.stuck_counter >= 2:
-                specific_params['rho'] = 0.5 
-                actions_taken.append(f"TUNE_{current_algo}: 提高挥发率 rho=0.5, 迫使其遗忘烂路重搜")
+        # ==========================================
+        # 核心：六大算法原生参数暴力接管区 (无需修改底层代码)
+        # ==========================================
+        needs_smooth = (details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000 or details.get('loop_penalty', 0) > 0)
 
-        elif current_algo == "PSO":
-            if details.get('smoothness', 0) > 2000:
-                specific_params['c1'] = 2.2  
-                specific_params['c2'] = 1.0
-                actions_taken.append("TUNE_PSO: 调高 c1 调低 c2, 使其注重个体轨迹自适应平滑")
+        if current_algo == "PSO":
+            # 只要把名字写对 (跟 PSOPlanner 里 self.xxx 名字一致)，底下就自动生效！
+            if needs_smooth:
+                specific_params['w_max'] = 0.4  # 直接压制惯性
+                specific_params['c1'] = 2.0     
+                specific_params['c2'] = 0.5     
+                actions_taken.append("TUNE_PSO: 强行修改底层参数 (w_max=0.4, c2=0.5)，限制粒子冲刺以打磨平滑度！")
+            elif self.stuck_counter >= 1:
+                specific_params['w_max'] = 1.2  
+                actions_taken.append("TUNE_PSO: 卡壳！直接篡改底层 (w_max=1.2)，强制惯性超载冲出瓶颈！")
+
+        elif current_algo == "WOA":
+            if needs_smooth:
+                specific_params['b'] = 0.2      # 直接收缩气泡网
+                actions_taken.append("TUNE_WOA: 强行修改底层参数 (b=0.2)，收紧螺旋圈以打磨平滑度！")
+            elif self.stuck_counter >= 1:
+                specific_params['b'] = 2.0      
+                actions_taken.append("TUNE_WOA: 卡壳！直接篡改底层 (b=2.0)，强行放大螺旋网扩大搜索！")
 
         elif current_algo == "SSA":
-            if self.stuck_counter >= 1:
-                specific_params['ST'] = 0.6  
-                actions_taken.append("TUNE_SSA: 降低安全阈值 ST=0.6, 强制打散局部僵局")
+            if needs_smooth:
+                specific_params['ST'] = 0.95    # 直接拉满安全感
+                actions_taken.append("TUNE_SSA: 强行修改底层参数 (ST=0.95)，让麻雀停止大跳跃以打磨平滑度！")
+            elif self.stuck_counter >= 1:
+                specific_params['ST'] = 0.4     
+                actions_taken.append("TUNE_SSA: 卡壳！直接篡改底层 (ST=0.4)，制造恐慌打散麻雀群！")
+
+        elif current_algo in ["ACO", "DSACO"]:
+            if needs_smooth:
+                specific_params['beta'] = 5.0   
+                specific_params['alpha'] = 0.5  
+                actions_taken.append(f"TUNE_{current_algo}: 强行修改底层参数 (beta=5.0)，增大终点牵引拉直路线！")
+            elif self.stuck_counter >= 2:
+                specific_params['rho'] = 0.6    
+                actions_taken.append(f"TUNE_{current_algo}: 卡壳！直接篡改底层 (rho=0.6)，加快挥发遗忘死胡同！")
 
         elif current_algo == "GWO":
             if self.stuck_counter >= 1:
                 specific_params['stagnation_max'] = 12  
-                actions_taken.append("TUNE_GWO: 降低停滞阈值至 12 代，加速触发大爆炸")
-
-        elif current_algo == "WOA":
-            if details.get('smoothness', 0) > 3000:
-                specific_params['b'] = 0.4  
-                actions_taken.append("TUNE_WOA: 减小对数螺旋系数 b=0.4, 收紧 3D 气泡网")
-
-        # 混合算法专属调参逻辑
+                actions_taken.append("TUNE_GWO: 卡壳！强行修改停滞阈值 stagnation_max=12，加速大爆炸！")
+                
         elif current_algo == "HybridPSOGWO":
-            if self.stuck_counter >= 1 or details.get('missed_target', 0) > 0:
-                specific_params['pso_ratio'] = 0.5  
-                actions_taken.append("TUNE_HYBRID: 延长 PSO 探路阶段比例至 50%，加强大范围视野")
+            if needs_smooth and not is_failing:
+                specific_params['pso_ratio'] = 0.1 
+                actions_taken.append("TUNE_HYBRID: 强行修改底层分配 (pso_ratio=0.1)，砍掉探路，交给GWO精修！")
+            elif self.stuck_counter >= 1 or details.get('missed_target', 0) > 0:
+                specific_params['pso_ratio'] = 0.5 
+                actions_taken.append("TUNE_HYBRID: 卡壳！直接拉高 PSO 探路比例至 50% 加强大范围突围！")
 
-        # 3. 共性参数宏观调控 (Macro-management)
+        # ==========================================
+        # 宏观算力调配
+        # ==========================================
         if is_failing:
             if self.algo_params['pop_size'] < 200:
                 self.algo_params['pop_size'] += 20
@@ -146,11 +135,6 @@ class CoordinatorAgent:
             if details.get('fatal_collision', 0) > 0 and self.algo_params['max_iter'] < 500:
                 self.algo_params['max_iter'] += 50
                 actions_taken.append("MACRO: INCREASE_MAX_ITER (延长规避计算工期)")
-
-        if details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000:
-            if self.eval_params.get('bspline_num_points', 100) < 150:
-                self.eval_params['bspline_num_points'] += 10
-                actions_taken.append("MACRO: ENHANCE_SMOOTHNESS (增加 B样条插值点数以柔化急弯)")
 
         if not actions_taken:
             actions_taken.append("MAINTAIN (当前状态极佳，维持原方)")

@@ -19,7 +19,8 @@ class PathEvaluator:
             'margin_violation': 5000.0,
             'altitude_violation': 50000.0,
             'boundary_violation': 50000.0,
-            'pitch_violation': 20000.0
+            'pitch_violation': 20000.0,
+            'loop_violation': 15000.0
         }
 
         self.params = {
@@ -195,7 +196,8 @@ class PathEvaluator:
             'altitude_violation': 0.0,
             'boundary_violation': 0.0,
             'gravity_cost': 0.0,
-            'pitch_violation': 0.0 # 记录俯仰角违规扣分
+            'pitch_violation': 0.0, # 记录俯仰角违规扣分
+            'loop_penalty': 0.0
         }
 
         # 1. 距离算分
@@ -226,11 +228,25 @@ class PathEvaluator:
             if pt[1] < self.env.y_bounds[0] or pt[1] > self.env.y_bounds[1]:
                 details['boundary_violation'] += bound_penalty
 
+        #  防绕圈/防自相交检测 (Anti-Looping)
+        N = len(path_points)
+        time_gap = 15  # 时间差：如果在相隔 15 个点之外
+        loop_radius = 5.0 # 空间差：距离又近于 5 米，那就是纯纯的绕圈
         
-        # ==========================================
-        # 大招二：SFJ (Straight Flight Judgment) 快筛雷达
+        if N > time_gap:
+            # 利用 numpy 上三角矩阵快速提取所有索引差 > time_gap 的点对
+            i_idx, j_idx = np.triu_indices(N, k=time_gap)
+            
+            # 向量化计算所有这些点对之间的 3D 距离 (计算速度是 for 循环的 100 倍)
+            dists = np.linalg.norm(path_points[i_idx] - path_points[j_idx], axis=1)
+            
+            # 找出那些“时间过了很久，却又回到原地附近”的违规点对
+            loop_count = np.sum(dists < loop_radius)
+            if loop_count > 0:
+                details['loop_penalty'] += loop_count * self.penalties.get('loop_violation', 15000.0)
+
+        # SFJ (Straight Flight Judgment) 快筛雷达
         # 极大降低 CPU 算力消耗，为 B-Spline 微小线段办理“免检通行证”
-        # ==========================================
         sfj_safe_segments = [False] * (len(path_points) - 1)
         jump_step = 10  # SFJ 探测步长：一次性往后看 10 步 (宏观视野)
         
@@ -244,7 +260,6 @@ class PathEvaluator:
                 # 探测安全！给中间这 10 个小线段全部盖上“免检”钢印！
                 for j in range(i, i + jump_step):
                     sfj_safe_segments[j] = True
-        # ==========================================
 
         for i in range(len(path_points) - 1):
             p1 = path_points[i]
@@ -309,11 +324,11 @@ class PathEvaluator:
         # 1. 提取控制点之间的间距惩罚 (保留对底层基因的排斥判定)
         spacing_penalty = self.calculate_spacing_penalty(raw_waypoints)
         
-        # 只有在相同分辨率(100个点)下算出的总分，才具备公平的进化对比价值。
-        num_pts = self.params.get('bspline_num_points', 100)
+        # 强制写死 100 个点作为唯一的绝对公平基准！
+        # 绝不读取 params 里的动态配置，防止 Agent 乱改导致分数通货膨胀！
+        num_pts = 100 
         smooth_path = self.generate_bspline_path(raw_waypoints, num_points=num_pts)
         
-        # 2. 对最终的真实飞行曲线进行全面的体检算分
         base_score, smooth_details, env_info = self.calculate_fitness(smooth_path)
         
         # 3. 补上底层基因的间距惩罚
