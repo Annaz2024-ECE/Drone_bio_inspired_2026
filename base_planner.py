@@ -41,6 +41,71 @@ class BasePlanner:
         full_path = np.vstack([self.env.start_point, waypoints, self.env.end_point])
         return full_path
 
+    def _generate_heuristic_skeleton(self):
+        """
+        [新增通用方法] 生成 3D 启发式拓扑骨架 (超级基因)
+        结合了 贪心TSP + 三点微簇锚固 + 高空拱门防穿模。
+        所有继承此类的子算法，都可以直接调用该方法获取保底的初始优良解。
+        """
+        start = self.env.start_point
+        end = self.env.end_point
+        
+        # 1. 收集目标点并算 Z 轴中点
+        targets_3d = []
+        for t in self.env.target_areas:
+            center = t['center']
+            z_mid = (t.get('z_min', 0) + t.get('z_max', 10)) / 2.0
+            targets_3d.append(np.array([center[0], center[1], z_mid]))
+        
+        # 2. 贪心最近邻 TSP 排序
+        unvisited = targets_3d.copy()
+        sorted_targets = []
+        current = start
+        while unvisited:
+            distances = [np.linalg.norm(p - current) for p in unvisited]
+            idx = np.argmin(distances)
+            nearest = unvisited.pop(idx)
+            sorted_targets.append(nearest)
+            current = nearest
+        
+        # 3. 三点微簇锚固 (对抗切角)
+        control_pts = []
+        for t in sorted_targets:
+            control_pts.append(t + np.array([-0.3, -0.3, -0.1]))
+            control_pts.append(t)
+            control_pts.append(t + np.array([0.3, 0.3, 0.1]))
+            
+        # 4. 拱门跨越 (对抗穿模)
+        safe_arch_z = 8.0 
+        while len(control_pts) < self.num_waypoints:
+            max_gap = -1.0
+            max_idx = 0
+            temp_path = [start] + control_pts + [end]
+            for i in range(len(temp_path) - 1):
+                gap = np.linalg.norm(temp_path[i+1] - temp_path[i])
+                if gap > max_gap:
+                    max_gap = gap
+                    max_idx = i
+                    
+            mid_point = (temp_path[max_idx] + temp_path[max_idx+1]) / 2.0
+            
+            # 只有间距大于 8 米的长航段，才需要强行拉起拱门
+            if max_gap > 8.0:
+                mid_point[2] = max(mid_point[2], safe_arch_z) 
+            
+            if max_idx == 0: 
+                control_pts.insert(0, mid_point)
+            elif max_idx == len(temp_path) - 1: 
+                control_pts.append(mid_point)
+            else: 
+                control_pts.insert(max_idx, mid_point)
+                
+        # 严格截断到指定的控制点数量
+        control_pts = control_pts[:self.num_waypoints]
+        
+        # 返回被环境物理边界安全修剪过的一维超级基因数组
+        return np.clip(np.array(control_pts).flatten(), self.lb, self.ub)
+
     def optimize(self):
         """
         [抽象方法] 核心的迭代寻优逻辑，必须由继承的子类 (如 PSO, GWO) 自己实现！

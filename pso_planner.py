@@ -39,66 +39,19 @@ class PSOPlanner(BasePlanner):
 
     def _initialize_particles(self):
         """ 
-        生成 3D 初始粒子群，引入“双点锚固”和“拱门飞跃”技术。
+        生成 3D 初始粒子群，直接调用基类的“TSP+三点锚固+拱门飞跃”超级骨架。
         """
         particles = np.zeros((self.num_particles, self.dim))
         
-        start = self.env.start_point
-        end = self.env.end_point
+        # ==========================================
+        # 1. 直接向父类索要“无敌拓扑骨架”
+        # ==========================================
+        super_skeleton = self._generate_heuristic_skeleton()
         
-        # 1. 收集目标点
-        targets_3d = []
-        for t in self.env.target_areas:
-            center = t['center']
-            z_mid = (t.get('z_min', 0) + t.get('z_max', 10)) / 2.0
-            targets_3d.append(np.array([center[0], center[1], z_mid]))
+        # 2. 第 0 号粒子直接封神，拿走完美骨架，保底不撞楼且不漏打卡
+        particles[0] = super_skeleton
         
-        # 2. 贪心最近邻 TSP 排序
-        unvisited = targets_3d.copy()
-        sorted_targets = []
-        current = start
-        while unvisited:
-            distances = [np.linalg.norm(p - current) for p in unvisited]
-            idx = np.argmin(distances)
-            nearest = unvisited.pop(idx)
-            sorted_targets.append(nearest)
-            current = nearest
-        
-        # 3. 【核心修复：双点锚固】对抗 B-Spline 切角漏检
-        control_pts = []
-        for t in sorted_targets:
-            control_pts.append(t)
-            control_pts.append(t + np.array([0.0, 0.0, 0.15])) # 微小偏移躲避去重审查
-            
-        # 4. 【核心修复：拱门跨越】
-        safe_arch_z = 8.0 
-        
-        while len(control_pts) < self.num_waypoints:
-            max_gap = -1.0
-            max_idx = 0
-            temp_path = [start] + control_pts + [end]
-            for i in range(len(temp_path) - 1):
-                gap = np.linalg.norm(temp_path[i+1] - temp_path[i])
-                if gap > max_gap:
-                    max_gap = gap
-                    max_idx = i
-                    
-            mid_point = (temp_path[max_idx] + temp_path[max_idx+1]) / 2.0
-            mid_point[2] = max(mid_point[2], safe_arch_z)  # 强制拉高
-            
-            if max_idx == 0:
-                control_pts.insert(0, mid_point)
-            elif max_idx == len(temp_path) - 1:
-                control_pts.append(mid_point)
-            else:
-                control_pts.insert(max_idx, mid_point)
-                
-        control_pts = control_pts[:self.num_waypoints]
-        super_particle = np.clip(np.array(control_pts).flatten(), self.lb, self.ub)
-        
-        # 5. 填充粒子群：使用 z_mask 限制垂直扰动幅度
-        particles[0] = super_particle
-        
+        # 3. 剩下的粒子基于无敌骨架，配合 z_mask 限制垂直扰动，进行不同梯度的变异探索
         for i in range(1, self.num_particles):
             if i < int(self.num_particles * 0.4):
                 noise = np.random.normal(0, 2.0, self.dim) * self.z_mask
@@ -107,7 +60,7 @@ class PSOPlanner(BasePlanner):
             else:
                 noise = np.random.normal(0, 12.0, self.dim) * self.z_mask
                 
-            particles[i] = np.clip(super_particle + noise, self.lb, self.ub)
+            particles[i] = np.clip(super_skeleton + noise, self.lb, self.ub)
         
         return particles
 

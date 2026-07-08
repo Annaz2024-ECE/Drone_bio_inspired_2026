@@ -31,82 +31,57 @@ class SSAPlanner(BasePlanner):
         self.historical_best_pos = np.zeros(self.dim)
         self.historical_best_score = np.inf
 
+    def _cubic_chaotic_map(self, size):
+        rho = 2.595  
+        chaos_seq = np.zeros(size)
+        x = np.random.rand() * 2 - 1 
+        if x == 0: x = 0.1 
+        for i in range(size):
+            x = rho * x * (1 - x**2)
+            chaos_seq[i] = x
+        return (chaos_seq + 1.0) / 2.0
+
     def _initialize_sparrows(self):
         sparrows = np.zeros((self.num_sparrows, self.dim))
         
-        start = self.env.start_point
-        end = self.env.end_point
+        # ==========================================
+        # 1. 获取 TSP + 拱门 的“无敌拓扑骨架” (保证初始不撞墙)
+        # ==========================================
+        super_skeleton = self._generate_heuristic_skeleton()
         
-        # 1. 收集所有目标点的 3D 中心坐标
-        targets_3d = []
-        for t in self.env.target_areas:
-            center = t['center']
-            z_mid = (t.get('z_min', 0) + t.get('z_max', 10)) / 2.0
-            targets_3d.append(np.array([center[0], center[1], z_mid]))
+        # ==========================================
+        # 2. 精英部队 (前 20%)：围绕无敌骨架微调，保有指路明灯
+        # ==========================================
+        elite_count = int(self.num_sparrows * 0.2)
+        sparrows[0] = super_skeleton # 第0号直接封神，保底 10 万分起步！
         
-        # 2. 最近邻（贪心 TSP）排序
-        unvisited = targets_3d.copy()
-        sorted_targets = []
-        current = start
-        while unvisited:
-            distances = [np.linalg.norm(p - current) for p in unvisited]
-            idx = np.argmin(distances)
-            nearest = unvisited.pop(idx)
-            sorted_targets.append(nearest)
-            current = nearest
-        
-        # 3. 【核心修复2：三点微簇锚固 (Triple-Cluster Anchoring)】
-        # 无论 coordinator 怎么改变 bspline_num_points，0.6m 的贯穿微簇都能确保曲线死死咬住目标中心！
-        control_pts = []
-        for t in sorted_targets:
-            control_pts.append(t + np.array([-0.3, -0.3, -0.1]))
-            control_pts.append(t)
-            control_pts.append(t + np.array([0.3, 0.3, 0.1]))
-            
-        # 4. 【拱门跨越】：补全控制点，并强制拉高避免穿模
-        safe_arch_z = 8.0 
-        
-        while len(control_pts) < self.num_waypoints:
-            max_gap = -1.0
-            max_idx = 0
-            temp_path = [start] + control_pts + [end]
-            for i in range(len(temp_path) - 1):
-                gap = np.linalg.norm(temp_path[i+1] - temp_path[i])
-                if gap > max_gap:
-                    max_gap = gap
-                    max_idx = i
-            
-            mid_point = (temp_path[max_idx] + temp_path[max_idx+1]) / 2.0
-            
-            # 只有在长距离跨越时才拉起拱门
-            if max_gap > 8.0:
-                mid_point[2] = max(mid_point[2], safe_arch_z)
-            
-            if max_idx == 0:
-                control_pts.insert(0, mid_point)
-            elif max_idx == len(temp_path) - 1:
-                control_pts.append(mid_point)
-            else:
-                control_pts.insert(max_idx, mid_point)
-                
-        control_pts = control_pts[:self.num_waypoints]
-        perfect_control_pts = np.array(control_pts).flatten()
-        
-        # 第 0 号：完美路径
-        sparrows[0] = np.clip(perfect_control_pts, self.lb, self.ub)
+        for i in range(1, elite_count):
+            noise = np.random.normal(0, 3.0, self.dim) * self.z_mask
+            sparrows[i] = np.clip(super_skeleton + noise, self.lb, self.ub)
 
-        # 5. 基于 TSP 骨架进行不同程度的变异
-        for i in range(1, self.num_sparrows):
-            if i < int(self.num_sparrows * 0.4):
-                noise = np.random.normal(0, 2.0, self.dim) * self.z_mask
-            elif i < int(self.num_sparrows * 0.8):
-                noise = np.random.normal(0, 6.0, self.dim) * self.z_mask
-            else:
-                noise = np.random.normal(0, 12.0, self.dim) * self.z_mask
-                
-            sparrow = perfect_control_pts + noise
-            sparrows[i] = np.clip(sparrow, self.lb, self.ub)
+        # ==========================================
+        # 3. 混沌散勇 (后 80%)：全图撒网，制造队友需要的“破壁”奇迹
+        # ==========================================
+        center_x = (self.env.x_bounds[0] + self.env.x_bounds[1]) / 2.0
+        center_y = (self.env.y_bounds[0] + self.env.y_bounds[1]) / 2.0
+
+        for i in range(elite_count, self.num_sparrows):
+            chaos_x = self._cubic_chaotic_map(self.num_waypoints)
+            chaos_y = self._cubic_chaotic_map(self.num_waypoints)
+            chaos_z = self._cubic_chaotic_map(self.num_waypoints)
             
+            rand_x = self.env.x_bounds[0] + chaos_x * (self.env.x_bounds[1] - self.env.x_bounds[0])
+            rand_y = self.env.y_bounds[0] + chaos_y * (self.env.y_bounds[1] - self.env.y_bounds[0])
+            rand_z = max(5.0, self.env.z_bounds[0]) + chaos_z * (self.env.z_bounds[1] - max(5.0, self.env.z_bounds[0]))
+            
+            raw_pts = np.column_stack((rand_x, rand_y, rand_z))
+            
+            # 极坐标理顺
+            angles = np.arctan2(raw_pts[:, 1] - center_y, raw_pts[:, 0] - center_x)
+            sorted_pts = raw_pts[np.argsort(angles)]
+            
+            sparrows[i] = np.clip(sorted_pts.flatten(), self.lb, self.ub)
+
         return sparrows
 
     def optimize(self):
@@ -155,6 +130,23 @@ class SSAPlanner(BasePlanner):
                 else:
                     new_sparrows[idx] = self.sparrows[idx] + np.random.uniform(-1, 1) * (np.abs(self.sparrows[idx] - worst_pos_current) / (self.fitness[idx] - worst_fit_current + 1e-8))
             
+            
+            # ==========================================
+            # 【新增：破壁者机制】抓取 20% 麻雀强行在最优解附近引爆
+            # ==========================================
+            mutate_count = int(self.num_sparrows * 0.2)
+            # 随机挑选 20% 的倒霉蛋，但绝不碰当前表现最好的那只
+            mutate_indices = np.random.choice(self.num_sparrows, mutate_count, replace=False)
+            if sort_indices[0] in mutate_indices:
+                mutate_indices = np.delete(mutate_indices, np.where(mutate_indices == sort_indices[0]))
+                
+            for idx in mutate_indices:
+                # 以最佳麻雀为中心，产生 3.0 米的高斯噪声球，并压制 Z 轴暴走
+                noise = np.random.randn(self.dim) * 3.0 * self.z_mask
+                new_sparrows[idx] = best_pos_current + noise
+            # ==========================================
+
+
             # (4) 越界处理与【贪婪适应度评估】
             for i in range(self.num_sparrows):
                 new_sparrows[i] = np.clip(new_sparrows[i], self.lb, self.ub)
