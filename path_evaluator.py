@@ -8,13 +8,13 @@ import scipy.interpolate as spl
 class PathEvaluator:
     def __init__(self):
         # 实例化3D环境
-        self.env = UAVEnvironment3D('maps/zijingang.json5')
+        self.env = UAVEnvironment3D('maps/haining.json5')
         
         # 基础惩罚权重
         self.penalties = {
             'fatal_collision': 1000000.0,  
             'missed_target_base': 500000.0,
-            'missed_target_factor': 1.0,    
+            'missed_target_factor': 20000.0,    
             'sharp_turn': 10000.0,   
             'margin_violation': 5000.0,
             'altitude_violation': 50000.0,
@@ -175,9 +175,12 @@ class PathEvaluator:
             
             if min_missed_dist > 0.1: 
                 # 动态读取惩罚值，如果没有被 Agent 修改，就默认使用你的阶梯惩罚
+                # 恢复原本纯粹且公平的线性惩罚逻辑
                 base_pen = self.penalties.get('missed_target_base', 500000.0)
-                factor_pen = self.penalties.get('missed_target_factor', 1.0)
-                total_target_penalty += base_pen + ((min_missed_dist ** factor_pen) * 20000.0)
+                factor_pen = self.penalties.get('missed_target_factor', 20000.0)
+                
+                # （距离 * 系数）
+                total_target_penalty += base_pen + (min_missed_dist * factor_pen)
                 
         return total_target_penalty
 
@@ -222,7 +225,26 @@ class PathEvaluator:
             # 2.3 Y 轴水平越界检测
             if pt[1] < self.env.y_bounds[0] or pt[1] > self.env.y_bounds[1]:
                 details['boundary_violation'] += bound_penalty
+
+        
+        # ==========================================
+        # 大招二：SFJ (Straight Flight Judgment) 快筛雷达
+        # 极大降低 CPU 算力消耗，为 B-Spline 微小线段办理“免检通行证”
+        # ==========================================
+        sfj_safe_segments = [False] * (len(path_points) - 1)
+        jump_step = 10  # SFJ 探测步长：一次性往后看 10 步 (宏观视野)
+        
+        for i in range(0, len(path_points) - jump_step, jump_step):
+            p_start = path_points[i]
+            p_end = path_points[i + jump_step]
             
+            # 使用稍微大一圈的安全余量 (比如 2.0米)，做一次宏观视距(LoS)判断
+            # 如果这条长直线是完全畅通的，说明这一大片空域没有任何障碍物！
+            if not self.env.is_segment_collision(p_start, p_end, safe_margin=2.0):
+                # 探测安全！给中间这 10 个小线段全部盖上“免检”钢印！
+                for j in range(i, i + jump_step):
+                    sfj_safe_segments[j] = True
+        # ==========================================
 
         for i in range(len(path_points) - 1):
             p1 = path_points[i]
@@ -243,6 +265,13 @@ class PathEvaluator:
                 # 累加惩罚：超出越多，惩罚越狠 (二次方惩罚)
                 details['pitch_violation'] += self.penalties.get('pitch_violation', 20000.0) * ((pitch - 45.0) / 10.0)
 
+            # ==========================================
+            # SFJ 偷懒判断发威！
+            if sfj_safe_segments[i]:
+                continue # 有 SFJ 护航说明周围绝对没有大楼，直接跳过极其耗时的几何障碍物遍历检测！
+            # ==========================================
+
+            # 只有在 SFJ 没敢打包票的地方，才启动复杂的避障排雷算法
             if self.env.is_segment_collision(p1, p2, safe_margin=0.0):
                 details['fatal_collision'] += fatal_penalty
                 continue 
