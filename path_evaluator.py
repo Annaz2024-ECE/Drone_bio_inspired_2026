@@ -51,6 +51,18 @@ class PathEvaluator:
             dist += self.env.calculate_distance(pts[i], pts[i+1])
         return dist
 
+    # ==========================================
+    # 新增下面这个方法：用于接收智能体的目标裁剪指令并刷新全局参数
+    # ==========================================
+    def update_env_targets(self, new_targets):
+        """ 
+        动态目标裁剪同步接口：更新环境目标，并重新计算理论最短距离 
+        """
+        self.env.target_areas = new_targets
+        # 重新计算剔除目标后的最短距离
+        self.ideal_min_distance = self._calculate_ideal_min_distance()
+        print(f" [环境同步] 气象裁剪完成！当前3D地图理论最短直线距离已刷新为: \033[92m{self.ideal_min_distance:.1f} 米\033[0m")
+
     def update_params(self, new_penalties=None, new_params=None):
         if new_penalties: self.penalties.update(new_penalties)
         if new_params: self.params.update(new_params)

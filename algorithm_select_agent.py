@@ -140,7 +140,7 @@ class Algorithm_Select_Agent:
                     t['z_min'] = t.get('z_min', 0.0) + 3.0
                 active_targets.append(t)
                 
-        self.env.target_areas = active_targets
+        self.evaluator.update_env_targets(active_targets)
         num_targets = len(active_targets)
         num_obstacles = len(self.env.obstacles)
         
