@@ -29,7 +29,7 @@ class SSAPlanner(BasePlanner):
         self.fitness = np.full(num_sparrows, np.inf)
         
         self.historical_best_pos = np.zeros(self.dim)
-        self.gbest_score = np.inf
+        self.historical_best_score = np.inf
 
     def _initialize_sparrows(self):
         sparrows = np.zeros((self.num_sparrows, self.dim))
@@ -115,8 +115,8 @@ class SSAPlanner(BasePlanner):
         for i in range(self.num_sparrows):
             full_path = self._decode_path(self.sparrows[i])
             self.fitness[i], _, _ = self.evaluator.evaluate_pso_particle(full_path)
-            if self.fitness[i] < self.gbest_score:
-                self.gbest_score = self.fitness[i]
+            if self.fitness[i] < self.historical_best_score:
+                self.historical_best_score = self.fitness[i]
                 self.historical_best_pos = np.copy(self.sparrows[i])
         
         for iteration in range(self.max_iter):
@@ -168,14 +168,14 @@ class SSAPlanner(BasePlanner):
                     self.sparrows[i] = new_sparrows[i]
                     self.fitness[i] = score
                 
-                if score < self.gbest_score:
-                    self.gbest_score = score
+                if score < self.historical_best_score:
+                    self.historical_best_score = score
                     self.historical_best_pos = np.copy(new_sparrows[i])
             
-            self.convergence_curve.append(self.gbest_score)
+            self.convergence_curve.append(self.historical_best_score)
             
             if (iteration + 1) % 20 == 0 or iteration == 0:
-                print(f"  > 迭代 {iteration+1:03d}/{self.max_iter} | 全局最优得分: {self.gbest_score:,.2f}")
+                print(f"  > 迭代 {iteration+1:03d}/{self.max_iter} | 全局最优得分: {self.historical_best_score:,.2f}")
         
         return self._decode_path(self.historical_best_pos), self.convergence_curve
         

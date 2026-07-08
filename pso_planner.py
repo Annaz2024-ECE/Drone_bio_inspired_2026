@@ -172,16 +172,16 @@ if __name__ == "__main__":
     save_dir = "PSO_3D"
     os.makedirs(save_dir, exist_ok=True)
     
-    num_runs = 10
+    num_runs = 1
     all_final_scores = []
     
     for run_idx in range(num_runs):
         print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
         # 注意这里的 num_waypoints 被强制设定成了 30 以上来适应复杂的 3D 拐角
-        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=30)
+        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=16)
         best_path, history = planner.optimize()
         
-        planner.evaluator.debug_target_coverage(best_path)
+        #planner.evaluator.debug_target_coverage(best_path)
         planner.plot_result(best_path, history, algo_name="PSO-3D", run_idx=run_idx, save_dir=save_dir)
         
         final_score = history[-1] if history else None
