@@ -71,7 +71,7 @@ class GWOPlanner(BasePlanner):
         return positions
 
     def optimize(self):
-        print("开始 GWO 灰狼优化算法路径规划 (搭载四大通用物理引擎)...")
+        print("开始 GWO 灰狼优化算法路径规划 (搭载四大通用物理引擎 + 拉普拉斯平滑)...")
         
         for l in range(self.max_iter):
             for i in range(self.num_wolves):
@@ -108,14 +108,18 @@ class GWOPlanner(BasePlanner):
             self.positions = w_alpha * X1 + w_beta * X2 + w_delta * X3
             
             # 🔥 统一物理指令接收器 (Universal API)
-            mutation_rate = 0.2
-            mutation_scale = 0.2 * (1.0 - l / self.max_iter) 
+            # 这里也加入了接收Agent对变异率的直接修改！
+            default_rate = 0.2
+            default_scale = 0.2 * (1.0 - l / self.max_iter) 
+            
+            mutation_rate = getattr(self, 'mutation_rate', default_rate)
+            mutation_scale = getattr(self, 'mutation_scale', default_scale)
 
             # 监听老中医广播的四大信号
             is_emergency = getattr(self, 'emergency_escape', False)
             is_press_down = getattr(self, 'press_down', False) 
-            is_lift_up = getattr(self, 'lift_up', False)        # 新增：拉升避障指令
-            is_radar = getattr(self, 'radar_guidance', False)   # 新增：雷达空投打卡指令
+            is_lift_up = getattr(self, 'lift_up', False)        
+            is_radar = getattr(self, 'radar_guidance', False)   
             
             if is_radar:
                 mutation_rate = 0.1  # 空投 10% 敢死队
@@ -161,6 +165,7 @@ class GWOPlanner(BasePlanner):
                 mutated_pos = self.alpha_pos + noise
                 self.positions[do_mutation] = mutated_pos[do_mutation]
                 
+            self.execute_universal_physics_directives() #直接调用基类的通用物理引擎，进行拉普拉斯平滑
 
             if abs(self.last_alpha_score - self.alpha_score) < 1.0: self.stagnation_count += 1
             else: self.stagnation_count, self.last_alpha_score = 0, self.alpha_score
