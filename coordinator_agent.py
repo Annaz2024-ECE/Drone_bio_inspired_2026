@@ -20,7 +20,8 @@ class CoordinatorAgent:
         specific_params['emergency_escape'] = False 
         specific_params['radar_guidance'] = False
         specific_params['press_down'] = False       
-        specific_params['lift_up'] = False          
+        specific_params['lift_up'] = False 
+        specific_params['apply_laplacian'] = False         
         
         print(f"\n[调参] 第 {self.meta_iteration} 轮诊断中... (负责压榨 {current_algo} 的极限)")
 
@@ -71,34 +72,49 @@ class CoordinatorAgent:
             specific_params['radar_guidance'] = True 
             actions_taken.append("UNIVERSAL: 偏离打卡点！激活全系统 [雷达空投] 机制")
 
-        # ==========================================
-        # 核心：六大算法原生参数暴力接管区 (无需修改底层代码)
+       # ==========================================
+        # 核心：六大算法原生参数暴力接管区 
         # ==========================================
         needs_smooth = (details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000 or details.get('loop_penalty', 0) > 0)
 
-        if current_algo == "PSO":
-            # 只要把名字写对 (跟 PSOPlanner 里 self.xxx 名字一致)，底下就自动生效！
+        if current_algo == "GWO":
+            if self.stuck_counter >= 1:
+                specific_params['stagnation_max'] = 12  
+                actions_taken.append("TUNE_GWO: 卡壳！强行修改停滞阈值 stagnation_max=12，加速大爆炸！")
+            
+            if needs_smooth:
+                # 第一步：限制瞎跑 (缩小变异)
+                specific_params['mutation_rate'] = 0.1   
+                specific_params['mutation_scale'] = 0.05 
+                # 第二步：启动几何强制平滑
+                specific_params['apply_laplacian'] = True
+                actions_taken.append("TUNE_GWO: 需平滑打磨！限制狼群乱跑，并启动 [拉普拉斯平滑算子] 强制拉直锯齿轨迹！")
+
+        elif current_algo == "PSO":
             if needs_smooth:
                 specific_params['w_max'] = 0.4  # 直接压制惯性
                 specific_params['c1'] = 2.0     
-                specific_params['c2'] = 0.5     
-                actions_taken.append("TUNE_PSO: 强行修改底层参数 (w_max=0.4, c2=0.5)，限制粒子冲刺以打磨平滑度！")
+                specific_params['c2'] = 0.5   
+                specific_params['apply_laplacian'] = True # 启动几何强制平滑
+                actions_taken.append("TUNE_PSO: 需平滑打磨！压低粒子惯性，并启动 [拉普拉斯平滑算子] 像橡皮筋一样拉直路线！")
             elif self.stuck_counter >= 1:
                 specific_params['w_max'] = 1.2  
                 actions_taken.append("TUNE_PSO: 卡壳！直接篡改底层 (w_max=1.2)，强制惯性超载冲出瓶颈！")
 
         elif current_algo == "WOA":
             if needs_smooth:
-                specific_params['b'] = 0.2      # 直接收缩气泡网
-                actions_taken.append("TUNE_WOA: 强行修改底层参数 (b=0.2)，收紧螺旋圈以打磨平滑度！")
+                specific_params['b'] = 0.2      
+                specific_params['apply_laplacian'] = True
+                actions_taken.append("TUNE_WOA: 需平滑打磨！收紧螺旋圈，并启动 [拉普拉斯算子] 辅助平滑！")
             elif self.stuck_counter >= 1:
                 specific_params['b'] = 2.0      
                 actions_taken.append("TUNE_WOA: 卡壳！直接篡改底层 (b=2.0)，强行放大螺旋网扩大搜索！")
 
         elif current_algo == "SSA":
             if needs_smooth:
-                specific_params['ST'] = 0.95    # 直接拉满安全感
-                actions_taken.append("TUNE_SSA: 强行修改底层参数 (ST=0.95)，让麻雀停止大跳跃以打磨平滑度！")
+                specific_params['ST'] = 0.95    
+                specific_params['apply_laplacian'] = True
+                actions_taken.append("TUNE_SSA: 需平滑打磨！拉高安全感，并启动 [拉普拉斯算子] 辅助平滑！")
             elif self.stuck_counter >= 1:
                 specific_params['ST'] = 0.4     
                 actions_taken.append("TUNE_SSA: 卡壳！直接篡改底层 (ST=0.4)，制造恐慌打散麻雀群！")
@@ -107,23 +123,21 @@ class CoordinatorAgent:
             if needs_smooth:
                 specific_params['beta'] = 5.0   
                 specific_params['alpha'] = 0.5  
-                actions_taken.append(f"TUNE_{current_algo}: 强行修改底层参数 (beta=5.0)，增大终点牵引拉直路线！")
+                specific_params['apply_laplacian'] = True
+                actions_taken.append(f"TUNE_{current_algo}: 需平滑打磨！增大终点牵引，并启动 [拉普拉斯算子] 辅助平滑！")
             elif self.stuck_counter >= 2:
                 specific_params['rho'] = 0.6    
                 actions_taken.append(f"TUNE_{current_algo}: 卡壳！直接篡改底层 (rho=0.6)，加快挥发遗忘死胡同！")
-
-        elif current_algo == "GWO":
-            if self.stuck_counter >= 1:
-                specific_params['stagnation_max'] = 12  
-                actions_taken.append("TUNE_GWO: 卡壳！强行修改停滞阈值 stagnation_max=12，加速大爆炸！")
                 
         elif current_algo == "HybridPSOGWO":
             if needs_smooth and not is_failing:
                 specific_params['pso_ratio'] = 0.1 
-                actions_taken.append("TUNE_HYBRID: 强行修改底层分配 (pso_ratio=0.1)，砍掉探路，交给GWO精修！")
+                specific_params['apply_laplacian'] = True
+                actions_taken.append("TUNE_HYBRID: 需平滑打磨！砍掉PSO探路，交给GWO精修，并应用拉普拉斯平滑！")
             elif self.stuck_counter >= 1 or details.get('missed_target', 0) > 0:
                 specific_params['pso_ratio'] = 0.5 
                 actions_taken.append("TUNE_HYBRID: 卡壳！直接拉高 PSO 探路比例至 50% 加强大范围突围！")
+
 
         # ==========================================
         # 宏观算力调配
