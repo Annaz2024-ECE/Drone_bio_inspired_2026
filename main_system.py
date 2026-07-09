@@ -74,15 +74,15 @@ if __name__ == "__main__":
     # ========================================================
     # 2. 模拟外部气象 API 数据输入 (你可以修改这里测试不同天气)
     # ========================================================
-    current_rainfall = 1.0   # 累计降雨量 mm (暴雨)
-    current_duration = 2.0    # 持续时间 h
+    current_rainfall = 70.0   # 累计降雨量 mm (暴雨)
+    current_duration = 20.0    # 持续时间 h
     
     # 3. 【框图节点1】：气象感知智能体评估环境，动态裁剪目标，决定首发阵容
     opt_agent = Algorithm_Select_Agent(
         evaluator=evaluator, 
         rainfall_mm=current_rainfall, 
         duration_hours=current_duration,
-        use_llm=False  # 等你 LLM 接口写好，这里改成 True 就行
+        use_llm=True  # 等你 LLM 接口写好，这里改成 True 就行
     )
     initial_planner = opt_agent.make_decision()
     current_algo_name = type(initial_planner).__name__.replace('Planner', '')

@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import json
+import getpass  # 【新增】用于安全输入密码的模块
+from openai import OpenAI  # 【新增】导入大模型 SDK
+import os
 
 # 导入所有底层规划器
 from pso_planner import PSOPlanner
@@ -60,17 +63,14 @@ class Algorithm_Select_Agent:
         
         【决策规则】
         1. 风险评估：根据降雨决定 Risk Level (High/Medium/Low)。
-        2. 目标裁剪：如果非暴雨，请剔除 lake, river, playground, garage, pool 等低洼易积水地带以省电；如果暴雨，必须保留它们进行防涝巡检，并将它们的 z_min 提高 3.0 米。
-        3. 算法分配：
-           - High 风险选择 "HybridPSOGWO"
-           - Medium 风险选择 "SSA"
-           - Low 风险选择 "PSO"
+        2. 目标裁剪：如果非暴雨，请剔除一些巡检区域用于省电；如果暴雨，必须保留它们进行防涝巡检，并考虑是否要将巡检高度提升一些。
+        3. 算法分配：根据地图和降雨情况，从PSO，SSA，GWO，WOA，HybridPSOGWO五种算法里面选择一种用于路径规划
            
         【输出格式要求】
         请严格输出为可解析的 JSON 格式，不要包含任何额外字符：
         {{
             "risk_level": "High/Medium/Low",
-            "reasoning": "你的决策思考过程",
+            "reasoning": "你的决策思考过程，包括risk-level计算，algorithm、retained_targets、z_lift_required决策原因",
             "algorithm": "算法名称",
             "retained_targets": ["保留下来的目标name1", "name2", ...],
             "z_lift_required": true/false (是否需要整体拔高探查高度)
@@ -137,7 +137,7 @@ class Algorithm_Select_Agent:
             if t.get('name') in decision_json['retained_targets']:
                 # 执行高度物理干预
                 if decision_json['z_lift_required']:
-                    t['z_min'] = t.get('z_min', 0.0) + 3.0
+                    t['z_min'] = t.get('z_min', 0.0) + 1.0
                 active_targets.append(t)
                 
         self.evaluator.update_env_targets(active_targets)
@@ -166,17 +166,82 @@ class Algorithm_Select_Agent:
         return base_pop, base_iter, base_waypoints
 
     # ==========================================
+    # 【新增】真实的 LLM 调度接口
+    # ==========================================
+    def _call_llm_api(self, prompt):
+        """
+        调用真实的云端大模型 API。
+        强制要求返回 JSON，并带有网络异常断开时的降级保护。
+        """
+        print("   -> [API 连线] 正在呼叫云端 LLM 大脑进行气象与地形分析...")
+        
+        # ==========================================
+        # 【修改这里】：动态安全获取 API Key
+        # ==========================================
+        api_key = os.environ.get("DEEPSEEK_API_KEY")
+        
+        # 如果环境变量里没有，就弹出安全输入提示
+        if not api_key:
+            print("\n\033[93m[系统提示] 需要连接云端大脑，但未检测到 DEEPSEEK_API_KEY。\033[0m")
+            api_key = getpass.getpass("请输入您的 DeepSeek API Key (输入时屏幕不可见，按回车确认): ")
+            
+            # 存入本次运行的临时环境变量中
+            # 这样如果系统在一个大循环里多次调用 LLM，就不会烦人地让你每次都输入了
+            os.environ["DEEPSEEK_API_KEY"] = api_key
+            
+        base_url = "https://api.deepseek.com"
+        model_name = "deepseek-v4-flash"
+        
+        try:
+            client = OpenAI(api_key=api_key, base_url=base_url)
+            
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": "你是一个严谨的具身智能无人机指挥系统。你必须强制输出合法的 JSON 格式数据，不要包含任何 Markdown 标记或多余的解释文本。"},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"}, 
+                temperature=0.1, 
+                timeout=15.0,
+                extra_body={"thinking": {"type": "disabled"}}
+            )
+            
+            result_str = response.choices[0].message.content
+            print("   -> [API 响应] 云端大脑决策接收成功！")
+
+            # ==========================================
+            # 【新增】：将 LLM 的原始输出打印到终端供你赏玩
+            # ==========================================
+            print("\n" + "·" * 40)
+            print("\033[94m[LLM 原始 JSON 输出预览]\033[0m")
+            print(result_str)
+            print("·" * 40 + "\n")
+
+            return result_str
+            
+        except Exception as e:
+            print(f"   -> [API 异常] 连线失败或超时: {e}")
+            print("   -> [降级机制] 正在切回本地紧急战术规则引擎 (Mock)...")
+            return self._call_llm_mock(prompt)
+
+    # ==========================================
     # 模块 C：主控枢纽
     # ==========================================
     def make_decision(self):
         # 1. 产生决策 (路由选择)
         if self.use_llm:
             prompt = self._build_llm_prompt()
-            # 【未来改这里】： response_str = requests.post("YOUR_LLM_API_URL", json={"prompt": prompt}).json()
-            response_str = self._call_llm_mock(prompt) 
-            decision_data = json.loads(response_str)
+            response_str = self._call_llm_api(prompt) 
+            
+            # 【新增 JSON 解析保护】防止大模型发疯输出无效格式
+            try:
+                decision_data = json.loads(response_str)
+            except json.JSONDecodeError:
+                print("   -> [解析异常] 大模型未返回合法 JSON，切回本地规则库...")
+                response_str = self._call_llm_mock(prompt)
+                decision_data = json.loads(response_str)
         else:
-            # 兼容非 LLM 模式，自己调 Mock 直接生成数据字典
             response_str = self._call_llm_mock(self._build_llm_prompt())
             decision_data = json.loads(response_str)
 
