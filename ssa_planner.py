@@ -31,6 +31,40 @@ class SSAPlanner(BasePlanner):
         self.historical_best_pos = np.zeros(self.dim)
         self.historical_best_score = np.inf
 
+    def _decode_path(self, position):
+        """
+        [子类重写] 植入贪心最近邻排序 (Nearest Neighbor Sort)
+        在每次评价前，强制理顺被打乱的麻雀基因，彻底消除 3D 航线打结与绕圈现象。
+        """
+        # 1. 将 1D 基因还原为 3D 坐标点阵
+        waypoints = position.reshape((self.num_waypoints, 3))
+        
+        # 2. 贪心最近邻排序核心逻辑
+        sorted_waypoints = []
+        current_point = self.env.start_point 
+        remaining_indices = list(range(self.num_waypoints))
+        
+        while remaining_indices:
+            best_idx = -1
+            min_dist = float('inf')
+            
+            # 遍历所有还没被连线的点，找离当前位置最近的
+            for idx in remaining_indices:
+                dist = np.linalg.norm(waypoints[idx] - current_point)
+                if dist < min_dist:
+                    min_dist = dist
+                    best_idx = idx
+                    
+            # 把找到的最近点加入有序列表，并将“当前位置”推进到该点
+            sorted_waypoints.append(waypoints[best_idx])
+            current_point = waypoints[best_idx]
+            remaining_indices.remove(best_idx)
+            
+        # 3. 拼接起终点返回
+        sorted_waypoints = np.array(sorted_waypoints)
+        full_path = np.vstack([self.env.start_point, sorted_waypoints, self.env.end_point])
+        return full_path
+
     def _cubic_chaotic_map(self, size):
         rho = 2.595  
         chaos_seq = np.zeros(size)

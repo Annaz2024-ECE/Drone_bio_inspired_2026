@@ -8,7 +8,7 @@ class PSOPlanner(BasePlanner):
         3D PSO 路径规划器 (已移植 SSA 的多目标锚固与高度约束技术)
         """
         # 【修复1】强制提升控制点数量以应对 3D 复杂度和双点锚固
-        num_waypoints = max(num_waypoints, 30)
+        num_waypoints = max(num_waypoints, 40)
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
         self.num_particles = num_particles
@@ -36,6 +36,40 @@ class PSOPlanner(BasePlanner):
         # 【核心修改】：废除原有的 gbest，使用 historical_best 完美对接老中医，实现跨轮次记忆！
         self.historical_best_pos = np.zeros(self.dim)
         self.historical_best_score = np.inf
+    
+    def _decode_path(self, position):
+        """
+        [子类重写] 植入贪心最近邻排序 (Nearest Neighbor Sort)
+        在每次评价前，强制理顺被打乱的麻雀基因，彻底消除 3D 航线打结与绕圈现象。
+        """
+        # 1. 将 1D 基因还原为 3D 坐标点阵
+        waypoints = position.reshape((self.num_waypoints, 3))
+        
+        # 2. 贪心最近邻排序核心逻辑
+        sorted_waypoints = []
+        current_point = self.env.start_point 
+        remaining_indices = list(range(self.num_waypoints))
+        
+        while remaining_indices:
+            best_idx = -1
+            min_dist = float('inf')
+            
+            # 遍历所有还没被连线的点，找离当前位置最近的
+            for idx in remaining_indices:
+                dist = np.linalg.norm(waypoints[idx] - current_point)
+                if dist < min_dist:
+                    min_dist = dist
+                    best_idx = idx
+                    
+            # 把找到的最近点加入有序列表，并将“当前位置”推进到该点
+            sorted_waypoints.append(waypoints[best_idx])
+            current_point = waypoints[best_idx]
+            remaining_indices.remove(best_idx)
+            
+        # 3. 拼接起终点返回
+        sorted_waypoints = np.array(sorted_waypoints)
+        full_path = np.vstack([self.env.start_point, sorted_waypoints, self.env.end_point])
+        return full_path
 
     def _initialize_particles(self):
         """ 
