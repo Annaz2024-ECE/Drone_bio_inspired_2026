@@ -10,6 +10,7 @@ from gwo_planner import GWOPlanner
 from ssa_planner import SSAPlanner
 from woa_planner_fix import WOAPlanner
 from hybrid_pso_gwo import HybridPSOGWO
+from ga_planner import GAPlanner
 
 def run_parameter_tuning_loop():
     print("=" * 60)
@@ -30,6 +31,7 @@ def run_parameter_tuning_loop():
         "SSA": SSAPlanner,
         "WOA": WOAPlanner,
         "HybridPSOGWO": HybridPSOGWO
+        "GA": GAPlanner
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字

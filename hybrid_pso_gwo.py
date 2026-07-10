@@ -86,13 +86,13 @@ class HybridPSOGWO(BasePlanner):
         return positions
 
     def optimize(self):
-        # 🔥 核心升级 1：动态读取老中医可能修改过的 pso_ratio 重新分配算力
+        # 核心升级 1：动态读取老中医可能修改过的 pso_ratio 重新分配算力
         current_pso_ratio = getattr(self, 'pso_ratio', self.default_pso_ratio)
         self.pso_iters = int(self.max_iter * current_pso_ratio)
         self.gwo_iters = self.max_iter - self.pso_iters
 
         print("\n" + "="*50)
-        print(" 🚀 开始执行 PSO-GWO 混合算法 (双擎驱动)")
+        print(" 开始执行 PSO-GWO 混合算法 (双擎驱动)")
         print(f"    - 上半场 (PSO探路): {self.pso_iters} 代")
         print(f"    - 下半场 (GWO精修): {self.gwo_iters} 代")
         print("="*50 + "\n")
@@ -101,7 +101,7 @@ class HybridPSOGWO(BasePlanner):
         # 【上半场】：PSO 粒子群探路阶段
         # ==========================================
         if self.pso_iters > 0:
-            print(" 🦅 [Phase 1/2] 启动 PSO 粒子群大范围搜索...")
+            print(" [Phase 1/2] 启动 PSO 粒子群大范围搜索...")
             
         for l in range(self.pso_iters):
             w = 0.9 - 0.5 * (l / max(1, self.pso_iters))  # 惯性权重递减
@@ -132,7 +132,7 @@ class HybridPSOGWO(BasePlanner):
             self.positions = np.clip(self.positions, self.lb, self.ub)
             
             # ==========================================
-            # 🔥 核心升级 2：上半场 PSO 更新后，启动通用物理引擎！
+            # 核心升级 2：上半场 PSO 更新后，启动通用物理引擎！
             # 无论拉普拉斯平滑还是推离墙壁，统统生效！
             self.execute_universal_physics_directives()
             # ==========================================
@@ -197,7 +197,7 @@ class HybridPSOGWO(BasePlanner):
             self.positions = np.clip(self.positions, self.lb, self.ub)
             
             # ==========================================
-            # 🔥 核心升级 3：下半场 GWO 更新后，同样启动通用物理引擎！
+            # 核心升级 3：下半场 GWO 更新后，同样启动通用物理引擎！
             self.execute_universal_physics_directives()
             # ==========================================
             
@@ -205,7 +205,7 @@ class HybridPSOGWO(BasePlanner):
             if (l + 1) % 20 == 0 or l == self.gwo_iters - 1:
                 print(f"   [GWO] 迭代 {l+1:03d}/{self.gwo_iters} | 历史最佳得分: {self.historical_best_score:,.2f}")
 
-        print("\n 🎉 混合算法优化完成！")
+        print("\n 混合算法优化完成！")
         return self._decode_path(self.historical_best_pos), self.convergence_curve
 
 if __name__ == "__main__":
