@@ -30,12 +30,12 @@ def run_parameter_tuning_loop():
         "GWO": GWOPlanner,
         "SSA": SSAPlanner,
         "WOA": WOAPlanner,
-        "HybridPSOGWO": HybridPSOGWO
+        "HybridPSOGWO": HybridPSOGWO,
         "GA": GAPlanner
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "HybridPSOGWO"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
+    TARGET_ALGO = "GWO"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
     
     print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
@@ -46,7 +46,8 @@ def run_parameter_tuning_loop():
     kwargs = {
         'evaluator': evaluator,
         # 3D 地图有 11 个打卡点，控制点必须大于 11，这里设为 16
-        'num_waypoints': 16, 
+        # 紫金港的：40-50
+        'num_waypoints': 40, 
         'max_iter': agent.algo_params['max_iter']
     }
     
