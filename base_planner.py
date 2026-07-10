@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+import time
 from path_evaluator import PathEvaluator
 
 class BasePlanner:
@@ -30,6 +31,9 @@ class BasePlanner:
         self.historical_best_pos = np.zeros(self.dim)
         self.historical_best_score = float("inf")
         self.convergence_curve = []
+
+        # 【新增】算法实例化的瞬间，按下计时秒表！
+        self.start_time = time.time()
 
     def _decode_path(self, position):
         """ [通用方法] 将一维的位置向量还原为包含起终点的完整 3D 路径 """
@@ -163,7 +167,34 @@ class BasePlanner:
         """ [抽象方法] 核心的迭代寻优逻辑，必须由继承的子类自己实现！ """
         raise NotImplementedError("子类必须实现 optimize() 方法！")
 
-    def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None):
+    def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None):
+        # 掐表算时间
+        end_time = time.time()
+        round_time = end_time - self.start_time
+        
+        # ==========================================
+        # 【新增】内部时间格式化小工具
+        # ==========================================
+        def get_time_str(seconds):
+            h, rem = divmod(int(seconds), 3600)
+            m, s = divmod(rem, 60)
+            if h > 0:
+                return f"{seconds:.2f}s ({h}h {m}m {s}s)"
+            elif m > 0:
+                return f"{seconds:.2f}s ({m}m {s}s)"
+            else:
+                return f"{seconds:.2f}s"
+
+        if global_start_time is not None:
+            total_time = end_time - global_start_time
+            print(f"\n[性能监控] {algo_name} 本轮耗时: {get_time_str(round_time)} | 多智能体系统总耗时: \033[93m{get_time_str(total_time)}\033[0m")
+            time_display = f"Total Time: {get_time_str(total_time)}"
+        else:
+            print(f"\n[性能监控] {algo_name} 算法计算耗时: \033[93m{get_time_str(round_time)}\033[0m")
+            time_display = f"Time Cost: {get_time_str(round_time)}"
+            
+        print("-" * 65)
+
         # ... (画图代码与之前保持一致) ...
         fig = plt.figure(figsize=(16, 8))
         ax1 = fig.add_subplot(121, projection='3d')
@@ -196,6 +227,10 @@ class BasePlanner:
                and k not in ['lb', 'ub', 'dim']:
                 val_str = f"{v:.2f}" if isinstance(v, float) else str(v)
                 params_list.append(f"  {k}: {val_str}")
+            
+        # 【新增】把总耗时强行塞进图片左侧的参数面板里！
+        params_list.append("-" * 15)
+        params_list.append(f"  {time_display}")
         
         params_text = f"Parameters:\n" + "\n".join(params_list)
         ax2.text(0.20, 0.95, params_text, transform=ax2.transAxes, fontsize=10,

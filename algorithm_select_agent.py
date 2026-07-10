@@ -34,7 +34,7 @@ class Algorithm_Select_Agent:
             "GWO": GWOPlanner,
             "WOA": WOAPlanner,
             #"DSACO": DSACOPlanner,
-            "HybridPSOGWO": HybridPSOGWO
+           # "HybridPSOGWO": HybridPSOGWO
         }
 
     # ==========================================

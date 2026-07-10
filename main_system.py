@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 # 导入底层规划算法
 from pso_planner import PSOPlanner
@@ -64,6 +65,8 @@ def create_planner_with_params(algo_name, evaluator, algo_params, specific_param
 # 理论框架图：闭环主运行流
 # ==========================================
 if __name__ == "__main__":
+    global_start_time = time.time()
+
     print("\n" + "★" * 65)
     print(" 多智能体协同无人机 3D 路径规划系统 - 启动 (气象 LLM Ready)")
     print("★" * 65)
@@ -183,4 +186,4 @@ if __name__ == "__main__":
     # ==========================================
     print(f"\n终极规划完成！最终全局得分: {global_best_score:,.2f}")
     # 借用最后一个 planner 实例的画图功能
-    planner.plot_result(global_best_path, full_convergence_history, algo_name=f"Final_{current_algo_name}")
+    planner.plot_result(global_best_path, full_convergence_history, algo_name=f"Final_{current_algo_name}", global_start_time=global_start_time)
