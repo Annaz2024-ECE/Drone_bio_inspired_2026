@@ -93,7 +93,9 @@ class BasePlanner:
         # 返回被环境物理边界安全修剪过的一维超级基因数组
         return np.clip(np.array(control_pts).flatten(), self.lb, self.ub)
 
-    # 将拉普拉斯平滑算子下沉为通用“基类武器”
+    # ==========================================
+    # 🔥 核心升级：将拉普拉斯平滑算子下沉为通用“基类武器”
+    # ==========================================
     def apply_laplacian_smoothing(self, positions, apply_ratio=0.5):
         """ 【基类通用方法】拉普拉斯平滑算子 (弹性带理论) """
         pop_size = positions.shape[0]
@@ -110,14 +112,52 @@ class BasePlanner:
                 
         return smoothed_positions
 
+
+    # 自适应法向斥力 (专门对付 Margin Violation)
+    def apply_margin_repulsion(self, positions, apply_ratio=0.5):
+        """ 【基类通用方法】法向推离算子 (人工势场法变体) """
+        pop_size = positions.shape[0]
+        repelled_positions = np.copy(positions)
+        
+        for i in range(pop_size):
+            if np.random.rand() < apply_ratio:
+                pts = repelled_positions[i].reshape((self.num_waypoints, 3))
+                new_pts = np.copy(pts)
+                
+                for j in range(1, self.num_waypoints - 1):
+                    # 1. 计算当前航段的飞行方向向量
+                    forward_vec = pts[j+1] - pts[j-1]
+                    forward_vec[2] = 0 # 仅在水平面计算法向量（因为建筑物通常是垂直的）
+                    norm = np.linalg.norm(forward_vec)
+                    
+                    if norm > 0.1:
+                        # 2. 逆时针旋转 90 度得到垂直法向量
+                        normal_vec = np.array([-forward_vec[1], forward_vec[0], 0]) / norm
+                        
+                        # 3. 随机向左或向右推开 1.5 米 (必然有一个方向是远离墙壁的)
+                        push_dir = 1.0 if np.random.rand() < 0.5 else -1.0
+                        push_force = normal_vec * push_dir * 1.5 
+                        
+                        # 4. 施加推力，同时给予微弱的安全升力 (爬升 0.5 米，对抗楼顶边缘擦碰)
+                        new_pts[j] += push_force
+                        new_pts[j][2] += 0.5 
+                        
+                repelled_positions[i] = np.clip(new_pts.flatten(), self.lb, self.ub)
+                
+        return repelled_positions
+
     def execute_universal_physics_directives(self):
         """ 
         【基类通用方法】统一执行老中医下发的物理动作！
         任何继承本基类的算法，只需在迭代末尾调用此方法，就能拥有全套物理技能！
         """
-        # 响应【拉普拉斯平滑】指令
+        # 1. 响应【拉普拉斯平滑】指令 (消除锯齿)
         if getattr(self, 'apply_laplacian', False):
             self.positions = self.apply_laplacian_smoothing(self.positions, apply_ratio=0.5)
+            
+        # 2. 响应【侧向斥力推离】指令 (消除擦墙)
+        if getattr(self, 'apply_repulsion', False):
+            self.positions = self.apply_margin_repulsion(self.positions, apply_ratio=0.4)
 
     def optimize(self):
         """ [抽象方法] 核心的迭代寻优逻辑，必须由继承的子类自己实现！ """

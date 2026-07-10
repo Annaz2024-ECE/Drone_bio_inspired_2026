@@ -5,7 +5,7 @@ class HybridPSOGWO(BasePlanner):
     def __init__(self, evaluator=None, pop_size=100, max_iter=150, pso_ratio=0.3, num_waypoints=16): 
         """
         [最强缝合怪] PSO + GWO 混合仿生路径规划算法
-        :param pso_ratio: PSO 阶段占总迭代次数的比例 (默认 30% 探路, 70% 灰狼精修)
+        :param pso_ratio: PSO 阶段占总迭代次数的比例 (默认 30% 探路，70% 灰狼精修)
         """
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
@@ -15,8 +15,7 @@ class HybridPSOGWO(BasePlanner):
         self.ub = np.tile([self.env.x_bounds[1], self.env.y_bounds[1], self.env.z_bounds[1]], self.num_waypoints)
         
         self.pop_size = pop_size
-        self.pso_iters = int(max_iter * pso_ratio)
-        self.gwo_iters = max_iter - self.pso_iters
+        self.default_pso_ratio = pso_ratio  # 保存一个初始默认比例
         
         # 初始化种群位置 (使用强大的 Cubic 混沌 + 靶向注入)
         self.positions = self._initialize_population()
@@ -87,8 +86,13 @@ class HybridPSOGWO(BasePlanner):
         return positions
 
     def optimize(self):
+        # 🔥 核心升级 1：动态读取老中医可能修改过的 pso_ratio 重新分配算力
+        current_pso_ratio = getattr(self, 'pso_ratio', self.default_pso_ratio)
+        self.pso_iters = int(self.max_iter * current_pso_ratio)
+        self.gwo_iters = self.max_iter - self.pso_iters
+
         print("\n" + "="*50)
-        print(" 开始执行 PSO-GWO 混合算法 (双擎驱动)")
+        print(" 🚀 开始执行 PSO-GWO 混合算法 (双擎驱动)")
         print(f"    - 上半场 (PSO探路): {self.pso_iters} 代")
         print(f"    - 下半场 (GWO精修): {self.gwo_iters} 代")
         print("="*50 + "\n")
@@ -96,9 +100,11 @@ class HybridPSOGWO(BasePlanner):
         # ==========================================
         # 【上半场】：PSO 粒子群探路阶段
         # ==========================================
-        print(" [Phase 1/2] 启动 PSO 粒子群大范围搜索...")
+        if self.pso_iters > 0:
+            print(" 🦅 [Phase 1/2] 启动 PSO 粒子群大范围搜索...")
+            
         for l in range(self.pso_iters):
-            w = 0.9 - 0.5 * (l / self.pso_iters)  # 惯性权重递减
+            w = 0.9 - 0.5 * (l / max(1, self.pso_iters))  # 惯性权重递减
             c1, c2 = 2.0, 2.0
             
             for i in range(self.pop_size):
@@ -123,6 +129,13 @@ class HybridPSOGWO(BasePlanner):
             self.V = w * self.V + cognitive + social
             self.V = np.clip(self.V, -0.2*(self.ub-self.lb), 0.2*(self.ub-self.lb)) # 限制最大速度
             self.positions += self.V
+            self.positions = np.clip(self.positions, self.lb, self.ub)
+            
+            # ==========================================
+            # 🔥 核心升级 2：上半场 PSO 更新后，启动通用物理引擎！
+            # 无论拉普拉斯平滑还是推离墙壁，统统生效！
+            self.execute_universal_physics_directives()
+            # ==========================================
             
             self.convergence_curve.append(self.historical_best_score)
             if (l + 1) % 10 == 0:
@@ -131,10 +144,11 @@ class HybridPSOGWO(BasePlanner):
         # ==========================================
         # 【下半场】：GWO 灰狼精英包围阶段 (无缝接力)
         # ==========================================
-        print("\n [Phase 2/2] 启动 GWO 灰狼动态加权包围收缩...")
-        # 将 PSO 的历史最优作为 GWO 开局的 Alpha 狼，防止丢掉好基因
-        self.alpha_score = self.historical_best_score
-        self.alpha_pos = self.historical_best_pos.copy()
+        if self.gwo_iters > 0:
+            print("\n 🐺 [Phase 2/2] 启动 GWO 灰狼动态加权包围收缩...")
+            # 将 PSO 的历史最优作为 GWO 开局的 Alpha 狼，防止丢掉好基因
+            self.alpha_score = self.historical_best_score
+            self.alpha_pos = self.historical_best_pos.copy()
 
         for l in range(self.gwo_iters):
             for i in range(self.pop_size):
@@ -155,7 +169,7 @@ class HybridPSOGWO(BasePlanner):
                     self.delta_score, self.delta_pos = fitness, self.positions[i].copy()
 
             # GWO 独有的非线性收缩因子
-            a = 2.0 * (1.0 - (l / self.gwo_iters) ** 2) 
+            a = 2.0 * (1.0 - (l / max(1, self.gwo_iters)) ** 2) 
             
             # 动态适应度权重分配
             epsilon = 1e-8
@@ -175,17 +189,23 @@ class HybridPSOGWO(BasePlanner):
             self.positions = w_alpha * X1 + w_beta * X2 + w_delta * X3
             
             # 【精英保护局部变异】防止 GWO 后期死锁
-            mutation_rate = 0.15 * (1.0 - l / self.gwo_iters)
+            mutation_rate = 0.15 * (1.0 - l / max(1, self.gwo_iters))
             do_mutation = np.random.rand(self.pop_size) < 0.2
             do_mutation[0] = False 
             noise = np.random.randn(self.pop_size, self.dim) * (self.ub - self.lb) * mutation_rate
             self.positions[do_mutation] = (self.alpha_pos + noise)[do_mutation]
+            self.positions = np.clip(self.positions, self.lb, self.ub)
+            
+            # ==========================================
+            # 🔥 核心升级 3：下半场 GWO 更新后，同样启动通用物理引擎！
+            self.execute_universal_physics_directives()
+            # ==========================================
             
             self.convergence_curve.append(self.historical_best_score)
             if (l + 1) % 20 == 0 or l == self.gwo_iters - 1:
                 print(f"   [GWO] 迭代 {l+1:03d}/{self.gwo_iters} | 历史最佳得分: {self.historical_best_score:,.2f}")
 
-        print("\n 混合算法优化完成！")
+        print("\n 🎉 混合算法优化完成！")
         return self._decode_path(self.historical_best_pos), self.convergence_curve
 
 if __name__ == "__main__":

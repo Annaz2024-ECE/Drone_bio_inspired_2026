@@ -21,7 +21,8 @@ class CoordinatorAgent:
         specific_params['radar_guidance'] = False
         specific_params['press_down'] = False       
         specific_params['lift_up'] = False 
-        specific_params['apply_laplacian'] = False         
+        specific_params['apply_laplacian'] = False
+        specific_params['apply_repulsion'] = False          
         
         print(f"\n[调参] 第 {self.meta_iteration} 轮诊断中... (负责压榨 {current_algo} 的极限)")
 
@@ -62,6 +63,11 @@ class CoordinatorAgent:
             actions_taken.append("UNIVERSAL: 遭遇建筑碰撞！下达全局 [紧急拉升] 指令，放宽转弯限制")
         else:
             self.eval_params['max_turn_angle'] = 120.0 
+
+        # 如果没直接撞死，但是擦墙了，启动物理斥力算子！
+        if details.get('margin_violation', 0) > 0 and details.get('fatal_collision', 0) == 0:
+            specific_params['apply_repulsion'] = True
+            actions_taken.append("UNIVERSAL: 航线极度擦墙 (Margin Violation)！启动 [侧向斥力算子]，强行将控制点从危险边缘推开！")
 
         is_safe_but_high = is_perfectly_safe and (details.get('gravity_cost', 0) > 1500)
         if is_safe_but_high:
