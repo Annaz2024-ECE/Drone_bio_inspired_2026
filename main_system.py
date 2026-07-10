@@ -104,6 +104,7 @@ if __name__ == "__main__":
     coord_agent.algo_params = {
         'pop_size': pop_size,
         'max_iter': initial_planner.max_iter,
+        #'max_iter': 5,
         'num_waypoints': initial_planner.num_waypoints  
     }
     current_algo_params = coord_agent.algo_params
@@ -156,19 +157,26 @@ if __name__ == "__main__":
             break
             
         # 【框图节点7】：一定次数后仍不达标，尝试更换算法！
-        if coord_agent.stuck_counter >= 3:
-            print(f"\n[系统告警] {current_algo_name} 已连续 3 轮抢救无效！强制切换算法！")
+        if coord_agent.stuck_counter >= 2:
+     #   if True:
+            print(f"\n[系统告警] {current_algo_name} 已连续 2 轮抢救无效！触发智能换将机制！")
             
-            # 引入混合算法进入备用调度池
-            fallback_dict = {
-                "PSO": "SSA", "SSA": "HybridPSOGWO", "HybridPSOGWO": "WOA", 
-                "WOA": "GWO", "GWO": "PSO", "DSACO": "ACO", "ACO": "GWO"
-            }
-            current_algo_name = fallback_dict.get(current_algo_name, "PSO")
+            # ==========================================
+            # 【修改这里】：将本轮失败的具体 details 明细，当做病历本传给指挥大脑
+            # ==========================================
+            next_algo, new_pop, new_iter, new_wp = opt_agent.get_fallback_algorithm(current_algo_name, details)
             
-            print(f"   -> 放弃当前算法，已更换为: {current_algo_name}")
+            current_algo_name = next_algo
+            
+            # 2. 必须把新算法专属的控制点数量和算力，强行同步给老中医！
+            coord_agent.algo_params['pop_size'] = new_pop
+            coord_agent.algo_params['max_iter'] = new_iter
+            coord_agent.algo_params['num_waypoints'] = new_wp
+            current_algo_params = coord_agent.algo_params
+            
+            # 3. 清空历史包袱，重新开始
             coord_agent.stuck_counter = 0 
-            current_specific_params = {} 
+            current_specific_params = {}
 
     # ==========================================
     # 寻优结束，调用最终画图

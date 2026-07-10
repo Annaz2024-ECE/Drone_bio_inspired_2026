@@ -64,7 +64,7 @@ class Algorithm_Select_Agent:
         【决策规则】
         1. 风险评估：根据降雨决定 Risk Level (High/Medium/Low)。
         2. 目标裁剪：如果非暴雨，请剔除一些巡检区域用于省电；如果暴雨，必须保留它们进行防涝巡检，并考虑是否要将巡检高度提升一些。
-        3. 算法分配：根据地图和降雨情况，从PSO，SSA，GWO，WOA，HybridPSOGWO五种算法里面选择一种用于路径规划
+        3. 算法分配：根据地图和降雨情况，从PSO，SSA，GWO，WOA四种算法里面选择一种用于路径规划
            
         【输出格式要求】
         请严格输出为可解析的 JSON 格式，不要包含任何额外字符：
@@ -164,6 +164,81 @@ class Algorithm_Select_Agent:
             base_waypoints = int(num_targets * 1.8) 
 
         return base_pop, base_iter, base_waypoints
+    
+
+    def get_fallback_algorithm(self, current_algo, failure_details=None):
+        """
+        【LLM 动态接管机制】
+        当前线算法卡死时，将现场态势与具体的“失败诊断书”打包发送给 LLM，请求实时换将。
+        """
+        print(f"\n[仿生优化智能体] 收到前线溃败报告！正在向云端大脑请求 {current_algo} 的替补战术...")
+        
+        available_algos = [algo for algo in self.algo_map.keys() if algo != current_algo]
+        
+        # 将失败明细格式化为漂亮的 JSON 字符串，方便大模型阅读
+        if failure_details:
+            # 过滤掉得分为 0 的完美项，只给大模型看扣分项，节省 Token 和注意力
+            failed_items = {k: v for k, v in failure_details.items() if v > 0}
+            details_str = json.dumps(failed_items, ensure_ascii=False, indent=2)
+        else:
+            details_str = "无详细错误日志"
+        
+        # 2. 构建专属的“危机求助 Prompt” (加入诊断书)
+        prompt = f"""
+        你是一个无人机 3D 路径规划的最高指挥大脑。
+        当前正在执行的算法 '{current_algo}' 已经连续 2 轮陷入局部最优死锁，无法找到安全的绕楼航线。
+        
+        【当前战场态势】
+        - 气象环境: 降雨量 {self.rainfall_mm}mm (持续 {self.duration_hours}h)
+        - 剩余需巡检目标: {len(self.env.target_areas)} 个
+        - 地图障碍物数量: {len(self.env.obstacles)} 个
+        - 可选替补算法池: {available_algos}
+        
+        【失败者的体检诊断书 (Fitness Breakdown)】
+        以下是导致 {current_algo} 算法卡壳的具体扣分项明细：
+        {details_str}
+        
+        请从备选池中挑选 1 个最适合针对性解决上述“体检诊断书”死穴的替补算法，并严格输出以下 JSON 格式：
+        {{
+            "algorithm": "算法名称",
+            "reasoning": "你的战术推演过程：你是如何根据诊断书上的扣分项，判定这个替补算法能破局的？"
+        }}
+        """
+
+        # 3. 呼叫云端大脑
+        if self.use_llm:
+            response_str = self._call_llm_api(prompt)
+            
+            # JSON 解析与容错保护
+            try:
+                decision_data = json.loads(response_str)
+            except json.JSONDecodeError:
+                print("   -> [解析异常] 大模型未返回合法 JSON，切回本地默认替补规则...")
+                decision_data = {"algorithm": available_algos[0], "reasoning": "JSON 解析失败，触发降级顺序轮转。"}
+        else:
+            # 本地无 LLM 时的 Mock 降级兜底
+            decision_data = {
+                "algorithm": available_algos[0], 
+                "reasoning": "未启用 LLM，触发本地默认轮转规则。"
+            }
+
+        # 4. 提取决策，并加上一层“幻觉防御” (防止大模型胡编乱造了一个我们没有的算法名字)
+        next_algo = decision_data.get("algorithm", available_algos[0])
+        if next_algo not in self.algo_map:
+            print(f"   -> [幻觉拦截] 大模型推荐了不存在的算法 '{next_algo}'，已强行修正！")
+            next_algo = available_algos[0]
+
+        print(f"   -> 云端战术变更: 决定派出替补算法 \033[96m{next_algo}\033[0m")
+        print(f"   -> 换将理由: \033[3m{decision_data.get('reasoning', '无')}\033[0m")
+        
+        # 5. 极其关键：必须用新算法重新计算基因长度与算力！
+        num_targets = len(self.env.target_areas)
+        num_obstacles = len(self.env.obstacles)
+        new_pop, new_iter, new_wp = self._fine_tune_parameters(next_algo, num_targets, num_obstacles)
+        
+        print(f"   -> 替补算力重配: 种群数 = {new_pop}, 迭代 = {new_iter}, 基因长度 = {new_wp}")
+        
+        return next_algo, new_pop, new_iter, new_wp
 
     # ==========================================
     # 【新增】真实的 LLM 调度接口
@@ -213,10 +288,10 @@ class Algorithm_Select_Agent:
             # ==========================================
             # 【新增】：将 LLM 的原始输出打印到终端供你赏玩
             # ==========================================
-            print("\n" + "·" * 40)
-            print("\033[94m[LLM 原始 JSON 输出预览]\033[0m")
-            print(result_str)
-            print("·" * 40 + "\n")
+            # print("\n" + "·" * 40)
+            # print("\033[94m[LLM 原始 JSON 输出预览]\033[0m")
+            # print(result_str)
+            # print("·" * 40 + "\n")
 
             return result_str
             

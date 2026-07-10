@@ -164,7 +164,6 @@ class SSAPlanner(BasePlanner):
                 else:
                     new_sparrows[idx] = self.sparrows[idx] + np.random.uniform(-1, 1) * (np.abs(self.sparrows[idx] - worst_pos_current) / (self.fitness[idx] - worst_fit_current + 1e-8))
             
-            
             # ==========================================
             # 【新增：破壁者机制】抓取 20% 麻雀强行在最优解附近引爆
             # ==========================================
@@ -180,6 +179,20 @@ class SSAPlanner(BasePlanner):
                 new_sparrows[idx] = best_pos_current + noise
             # ==========================================
 
+            # ==========================================
+            # >>> 【完美缝隙】：触发基类的通用物理引擎 (拉普拉斯平滑) <<<
+            # 桥接黑科技：把局部的 new_sparrows 伪装成基类认识的 self.positions
+            self.positions = new_sparrows
+            
+            # 执行老中医下发的全局平滑物理指令
+            self.execute_universal_physics_directives()
+            
+            # 技能释放完毕后，把平滑后的结果重新拿回给 new_sparrows
+            new_sparrows = self.positions
+
+            # 烧毁临时护照
+            del self.positions
+            # ==========================================
 
             # (4) 越界处理与【贪婪适应度评估】
             for i in range(self.num_sparrows):

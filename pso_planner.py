@@ -124,7 +124,9 @@ class PSOPlanner(BasePlanner):
         for iteration in range(self.max_iter):
             w_current = self.w_max - (self.w_max - self.w_min) * (iteration / self.max_iter)
             
-            # 更新粒子速度和位置
+            # ==========================================
+            # 第一阶段：纯粹的物理位移 (只算公式，不打分)
+            # ==========================================
             for i in range(self.num_particles):
                 r1 = np.random.rand(self.dim)
                 r2 = np.random.rand(self.dim)
@@ -137,8 +139,26 @@ class PSOPlanner(BasePlanner):
                 
                 self.particles[i] += self.velocities[i]
                 self.particles[i] = np.clip(self.particles[i], self.lb, self.ub)
-                
-                # 评估新位置
+
+            # ==========================================
+            # >>> 【完美缝隙】：触发全局拉普拉斯平滑 <<<
+            # 桥接黑科技：把 self.particles 临时伪装成 self.positions 借给基类用
+            self.positions = self.particles
+            
+            # 呼叫基类的物理引擎进行平滑
+            self.execute_universal_physics_directives()
+            
+            # 把平滑后的结果拿回来
+            self.particles = self.positions
+            
+            # 烧毁临时护照
+            del self.positions
+            # ==========================================
+
+            # ==========================================
+            # 第二阶段：纯粹的成绩评估与记录
+            # ==========================================
+            for i in range(self.num_particles):
                 full_path = self._decode_path(self.particles[i])
                 score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
                 
@@ -148,6 +168,7 @@ class PSOPlanner(BasePlanner):
                 if score < self.historical_best_score:
                     self.historical_best_score = score
                     self.historical_best_pos = np.copy(self.particles[i])
+
                     
             # ==========================================
             # 接收老中医的四大通用物理指令 (Universal API)
