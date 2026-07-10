@@ -7,6 +7,7 @@ from pso_planner import PSOPlanner
 from ssa_planner import SSAPlanner
 from gwo_planner import GWOPlanner
 from woa_planner_fix import WOAPlanner
+from ga_planner import GAPlanner
 #from dsaco_planner import DSACOPlanner
 from hybrid_pso_gwo import HybridPSOGWO
 
@@ -34,6 +35,8 @@ def create_planner_with_params(algo_name, evaluator, algo_params, specific_param
         planner = GWOPlanner(evaluator=evaluator, num_wolves=pop_size, max_iter=max_iter, num_waypoints=num_waypoints)
     elif algo_name == "WOA":
         planner = WOAPlanner(evaluator=evaluator, pop_size=pop_size, max_iter=max_iter, num_waypoints=num_waypoints)
+    elif algo_name == "GA":
+        planner = GAPlanner(evaluator=evaluator, pop_size=pop_size, max_iter=max_iter, num_waypoints=num_waypoints)
     elif algo_name == "DSACO":
         planner = DSACOPlanner(evaluator=evaluator, num_ants=pop_size, max_iter=max_iter, num_waypoints=num_waypoints)
     elif algo_name == "ACO":
