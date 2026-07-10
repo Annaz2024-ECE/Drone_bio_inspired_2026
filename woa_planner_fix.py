@@ -1,23 +1,63 @@
 import numpy as np
+import math
+import time
 from base_planner import BasePlanner
 
 class WOAPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_waypoints=20, pop_size=60, max_iter=200):
+    def __init__(self, evaluator=None, num_waypoints=25, pop_size=60, max_iter=200):
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
         self.pop_size = pop_size
         self.positions = np.random.uniform(self.lb, self.ub, (self.pop_size, self.dim))
-        
-        # 1. 【移除】去掉了所有 safe_margin 和 effective_lb/ub 相关的代码，解除硬限制
-        
         self.top_30_percent = int(self.pop_size * 0.3)
         
-        # 2. 动态提取 JSON 中的 3D 巡检目标点
+        #动态提取 JSON 中的 3D 巡检目标点
         self.target_anchors = []
         for target in self.env.target_areas:
             center_x, center_y = target['center'][:2]
             z_mid = (target.get('z_min', 4.0) + target.get('z_max', 8.0)) / 2.0
             self.target_anchors.append([center_x, center_y, z_mid])
+        # 【优化 1】：参考论文，将纯随机初始化升级为“混合莱维飞行初始化”
+        self.positions = self._hybrid_initialization()
+    
+    def _levy_step(self, dim):
+        """
+        使用经典 Mantegna 算法生成莱维飞行步长向量
+        """
+        beta = 1.5  # 论文推荐的特征指数
+        
+        # 计算 Mantegna 算法中的标准差 sigma_u
+        num = math.gamma(1 + beta) * math.sin(math.pi * beta / 2)
+        den = math.gamma((1 + beta) / 2) * beta * (2 ** ((beta - 1) / 2))
+        sigma_u = (num / den) ** (1 / beta)
+        
+        # 生成正态分布随机数
+        u = np.random.normal(0, sigma_u, dim)
+        v = np.random.normal(0, 1, dim)
+        
+        # 计算莱维步长
+        step = u / (np.abs(v) ** (1 / beta))
+        return step
+    
+    def _hybrid_initialization(self):
+        """
+        混合初始化：50% 传统随机分布，50% 施加莱维飞行大步长扰动
+        """
+        positions = np.zeros((self.pop_size, self.dim))
+        
+        # 前 50% 保持传统的均匀随机分布
+        m1 = int(self.pop_size * 0.5)
+        positions[:m1, :] = np.random.uniform(self.lb, self.ub, (m1, self.dim))
+        
+        # 后 50% 引入莱维飞行扰动，拓宽开局时航线在 3D 空间中的广度
+        for i in range(m1, self.pop_size):
+            base_pos = np.random.uniform(self.lb, self.ub, self.dim)
+            levy_factor = self._levy_step(self.dim)
+            # 扰动强度设为地图跨度的 10%，既能大跳又不会完全失控
+            perturbed_pos = base_pos + levy_factor * 0.1 * (self.ub - self.lb)
+            positions[i, :] = np.clip(perturbed_pos, self.lb, self.ub)
+            
+        return positions
 
     def _decode_path(self, position):
         """
@@ -78,7 +118,10 @@ class WOAPlanner(BasePlanner):
                         rand_idx = np.random.randint(0, self.pop_size)
                         rand_pos = self.positions[rand_idx, :]
                         D_x_rand = abs(C * rand_pos - self.positions[i, :])
-                        new_pos = rand_pos - A * D_x_rand
+                        
+                        levy_jump = self._levy_step(self.dim)
+                        # 将莱维大跳跃叠加到位置更新公式中（权重控制在 5% 以内保证收敛平稳）
+                        new_pos = rand_pos - A * D_x_rand + levy_jump * 0.05 * (self.ub - self.lb)
                     else:
                         D_Leader = abs(C * self.historical_best_pos - self.positions[i, :])
                         new_pos = self.historical_best_pos - A * D_Leader
@@ -86,7 +129,7 @@ class WOAPlanner(BasePlanner):
                     D_Leader = abs(self.historical_best_pos - self.positions[i, :])
                     new_pos = D_Leader * np.exp(b * l) * np.cos(2 * np.pi * l) + self.historical_best_pos
 
-                # 3. 【修改】直接使用基类的 self.lb 和 self.ub 进行裁剪
+                
                 clipped_pos = np.clip(new_pos, self.lb, self.ub)
 
                 waypoints_temp = clipped_pos.reshape((self.num_waypoints, 3))
@@ -117,6 +160,7 @@ class WOAPlanner(BasePlanner):
         return self._decode_path(self.historical_best_pos), self.convergence_curve
 
 if __name__ == "__main__":
+    start_time = time.time()  # 记录起点时间
     # 建议航点数至少大于等于目标区域数量 (haining.json5 中有 11 个 target)
     planner = WOAPlanner(num_waypoints=20, pop_size=60, max_iter=200)
     
@@ -125,3 +169,9 @@ if __name__ == "__main__":
     print(f"\n规划完成！最终得分: {convergence_history[-1]:,.2f}")
     print(best_path)
     planner.plot_result(best_path, convergence_history, algo_name="WOA-3D")
+
+    end_time = time.time()  # 记录起点时间
+    elapsed_time = end_time - start_time  # 计算总差值（单位是秒）
+    print("-" * 50)
+    print(f"本次单线程运行总耗时: {elapsed_time:.2f} 秒 (约 {elapsed_time / 60:.2f} 分钟)")
+    print("-" * 50)
