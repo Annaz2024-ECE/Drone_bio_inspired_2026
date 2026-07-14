@@ -13,7 +13,16 @@ class CoordinatorAgent:
         self.stuck_counter = 0
         self.last_score = float('inf')
 
+        # 【新增】：专门用来记忆上一次下发的微观算法参数
+        self.last_specific_params = {}
+
     def analyze_and_act(self, total_score, details, env_info, current_algo):
+        # ==========================================
+        # 【新增】：调参前，先给所有当前参数“拍照存档”
+        # ==========================================
+        old_algo_params = self.algo_params.copy()
+        old_eval_params = self.eval_params.copy()
+
         self.meta_iteration += 1
         actions_taken = []
         specific_params = {} 
@@ -117,7 +126,39 @@ class CoordinatorAgent:
         if not actions_taken:
             actions_taken.append("MAINTAIN (当前状态极佳，全军保持原方推进)")
 
+        # ==========================================
+        # 🔥 【新增】：精准的状态比对引擎 (State Diff)
+        # ==========================================
+        param_changes = []
+        
+        # 1. 抓取【宏观算力参数】的数值突变
+        for k, v in self.algo_params.items():
+            if old_algo_params.get(k) != v:
+                param_changes.append(f"{k}: {old_algo_params.get(k)}->{v}")
+                
+        # 2. 抓取【物理评价参数】的数值突变
+        for k, v in self.eval_params.items():
+            if old_eval_params.get(k) != v:
+                param_changes.append(f"{k}: {old_eval_params.get(k)}->{v}")
+                
+        # 3. 抓取【微观算法参数】与【物理动作】的切变
+        for k, v in specific_params.items():
+            # 物理动作是布尔值触发器，单独处理
+            if k in ['emergency_escape', 'radar_guidance', 'press_down', 'lift_up', 'apply_laplacian', 'apply_repulsion']:
+                if v is True:
+                    param_changes.append(f"Act: {k}")
+                continue
+            
+            # 数值型微观参数比对
+            old_val = self.last_specific_params.get(k, "Init")
+            if old_val != v:
+                param_changes.append(f"{k}: {old_val}->{v}")
+        
+        # 刷新记忆中枢，供下一轮比对使用
+        self.last_specific_params.update(specific_params)
+
         for action in actions_taken:
             print(f"  └── 药方: \033[93m{action}\033[0m")
 
-        return self.algo_params, self.eval_params, specific_params, is_finished
+        # 【修改返回值】：把精准的 param_changes 列表扔给主程序
+        return self.algo_params, self.eval_params, specific_params, is_finished, param_changes

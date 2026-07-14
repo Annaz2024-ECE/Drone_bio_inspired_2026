@@ -119,7 +119,13 @@ if __name__ == "__main__":
     # 记录全局最优
     global_best_path = None
     global_best_score = float('inf')
-    full_convergence_history = []
+   # full_convergence_history = []
+
+    # ==========================================
+    # 【新增代码 1】：初始化全局迭代计数器和事件记录簿
+    # ==========================================
+    global_iteration_count = 0  
+    event_history = []
     
     MAX_META_ITERATIONS = 5 # 允许协调智能体最多干预的大轮次
 
@@ -139,14 +145,19 @@ if __name__ == "__main__":
         
         # 【框图节点3】：仿生学算法执行并输出路线
         best_path, history = planner.optimize()
+
+        # ==========================================
+        # 【新增代码 2】：累加全局迭代次数，作为事件图表的 X 轴坐标
+        # ==========================================
+        global_iteration_count += len(history)
         
         # 更新全局记录
-        full_convergence_history.extend(history)
+        #full_convergence_history.extend(history)
         
         # 【框图节点4】：路径评价智能体打分 (获取分数与明细)
         total_score, details, env_info = evaluator.evaluate_pso_particle(best_path)
 
-        print(f"\n [本轮结算] 3D 最终得分: {final_score:,.2f}")
+        print(f"\n [本轮结算] 3D 最终得分: {total_score:,.2f}")
         for k, v in details.items():
             if v > 0: 
                 color = "\033[91m" if v > 1000 else "\033[0m"
@@ -157,8 +168,19 @@ if __name__ == "__main__":
             global_best_path = best_path
 
         # 【框图节点5 & 6】：协调决策智能体介入分析并开药方
-        current_algo_params, new_eval_params, current_specific_params, is_finished = \
+        current_algo_params, new_eval_params, current_specific_params, is_finished, param_changes = \
             coord_agent.analyze_and_act(global_best_score, details, env_info, current_algo_name)
+
+        if param_changes:
+            # 用换行符把所有状态切变拼成一个多行文本块 (如 "pm: 0.1->0.6\nAct: lift_up")
+            exact_tag = "\n".join(param_changes)
+            # 打包记录：(发生事件的 X 轴坐标, 事件内容标签)
+            event_history.append((global_iteration_count, exact_tag))
+
+            # 【新增】：在终端用高亮颜色实时打印出调参明细
+            print(f"\n  [\033[96m特工干预档案\033[0m] 在第 {global_iteration_count} 代触发硬核数值切变:")
+            for change in param_changes:
+                print(f"    👉 {change}")
             
         # 调整评价器物理规则
         evaluator.params.update(new_eval_params)
@@ -194,5 +216,14 @@ if __name__ == "__main__":
     # 寻优结束，调用最终画图
     # ==========================================
     print(f"\n终极规划完成！最终全局得分: {global_best_score:,.2f}")
-    # 借用最后一个 planner 实例的画图功能
-    planner.plot_result(global_best_path, full_convergence_history, algo_name=f"Final_{current_algo_name}", global_start_time=global_start_time)
+
+    # ==========================================
+    # 【修改代码 4】：把 global_start_time 和 event_history 喂给绘图引擎
+    # ==========================================
+    planner.plot_result(
+        global_best_path, 
+        history, 
+        algo_name=f"Final_{current_algo_name}", 
+        global_start_time=global_start_time,
+        event_history=event_history   # 就是这里！
+    )

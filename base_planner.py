@@ -167,7 +167,7 @@ class BasePlanner:
         """ [抽象方法] 核心的迭代寻优逻辑，必须由继承的子类自己实现！ """
         raise NotImplementedError("子类必须实现 optimize() 方法！")
 
-    def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None):
+    def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None):
         # 掐表算时间
         end_time = time.time()
         round_time = end_time - self.start_time
@@ -219,6 +219,36 @@ class BasePlanner:
         ax2.set_ylabel('Fitness Score (Log Scale)', fontsize=12)
         ax2.set_yscale('log') 
         ax2.grid(True, linestyle=':', alpha=0.6)
+
+        # ==========================================
+        # 🔥 【新增】：在曲线上方渲染“特工干预事件”
+        # ==========================================
+        if event_history:
+            # 预设几种醒目的警示色，循环使用
+            event_colors = ['#d32f2f', '#1976d2', '#f57c00', '#388e3c', '#8e24aa']
+            
+            for i, (iter_idx, action_tag) in enumerate(event_history):
+                # 如果干预点超出了当前历史长度，则忽略
+                if iter_idx >= len(score_history):
+                    continue
+                    
+                color = event_colors[i % len(event_colors)]
+                
+                # 1. 画一条贯穿上下的虚线，精确标定干预发生的迭代节点
+                ax2.axvline(x=iter_idx, color=color, linestyle='--', alpha=0.7, linewidth=1.5)
+                
+                # 2. 在虚线旁边写上干预内容 (使用 get_xaxis_transform 让 Y 轴坐标变为 0~1 的相对比例，完美适配 Log 对数坐标轴)
+                # 使用取余算法错开文本高度，防止多个事件标签重叠在一起 (从底部的 10% 到 60% 交替)
+                # 2. 在虚线旁边写上精确的参数切变
+                y_offset = 0.10 + (i % 5) * 0.15 
+                ax2.text(iter_idx, y_offset, f" {action_tag}", 
+                         transform=ax2.get_xaxis_transform(),
+                         rotation=0, color=color, 
+                         fontsize=8,           # 【调整】字体稍微调小一点以容纳多行
+                         linespacing=1.2,      # 【新增】增加多行文本的行间距
+                         fontweight='bold', 
+                         va='bottom', ha='left',
+                         bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.85, edgecolor=color))
         
         params_list = []
         for k, v in self.__dict__.items():
