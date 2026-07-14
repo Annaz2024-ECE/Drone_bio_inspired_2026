@@ -264,16 +264,16 @@ class PSOPlanner(BasePlanner):
 
 # ===================== 修改后的主函数（10次循环保存） =====================
 if __name__ == "__main__":
-    save_dir = "PSO_3D"
+    save_dir = "PSO_3D_Haining"
     os.makedirs(save_dir, exist_ok=True)
     
-    num_runs = 1
+    num_runs = 10
     all_final_scores = []
     
     for run_idx in range(num_runs):
         print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
         # 注意这里的 num_waypoints 被强制设定成了 30 以上来适应复杂的 3D 拐角
-        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=16)
+        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=40)
         best_path, history = planner.optimize()
         
         #planner.evaluator.debug_target_coverage(best_path)

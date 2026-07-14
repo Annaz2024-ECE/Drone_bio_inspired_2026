@@ -64,10 +64,9 @@ class Algorithm_Select_Agent:
         - 障碍物数量: {len(self.env.obstacles)}
         
         【决策规则】
-        1. 风险评估：根据降雨决定 Risk Level (High/Medium/Low)。
+        1. 风险评估：根据降雨情况决定 Risk Level (High/Medium/Low)。
         2. 目标裁剪：如果非暴雨，请剔除一些巡检区域用于省电；如果暴雨，必须保留它们进行防涝巡检，并考虑是否要将巡检高度提升一些。
         3. 算法分配：根据地图和降雨情况，从PSO，SSA，GWO，WOA, GA五种算法里面选择一种用于路径规划
-        4. 第一次先尝试用GA算法
            
         【输出格式要求】
         请严格输出为可解析的 JSON 格式，不要包含任何额外字符：
@@ -162,7 +161,7 @@ class Algorithm_Select_Agent:
         base_waypoints = int(num_targets) 
 
         if algo_name in ["PSO", "SSA"]:
-            base_waypoints = int(num_targets * 3.5) 
+            base_waypoints = int(num_targets * 3.8) 
         elif algo_name in ["GWO", "WOA", "GA"]:
             base_waypoints = int(num_targets * 1.8) 
 

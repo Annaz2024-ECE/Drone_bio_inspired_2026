@@ -80,8 +80,8 @@ if __name__ == "__main__":
     # ========================================================
     # 2. 模拟外部气象 API 数据输入 (你可以修改这里测试不同天气)
     # ========================================================
-    current_rainfall = 70.0   # 累计降雨量 mm (暴雨)
-    current_duration = 20.0    # 持续时间 h
+    current_rainfall = 45.0   # 累计降雨量 mm (暴雨)
+    current_duration = 10.0    # 持续时间 h
     
     # 3. 【框图节点1】：气象感知智能体评估环境，动态裁剪目标，决定首发阵容
     opt_agent = Algorithm_Select_Agent(
@@ -145,6 +145,12 @@ if __name__ == "__main__":
         
         # 【框图节点4】：路径评价智能体打分 (获取分数与明细)
         total_score, details, env_info = evaluator.evaluate_pso_particle(best_path)
+
+        print(f"\n [本轮结算] 3D 最终得分: {final_score:,.2f}")
+        for k, v in details.items():
+            if v > 0: 
+                color = "\033[91m" if v > 1000 else "\033[0m"
+                print(f"    - {k}: {color}{v:,.2f}\033[0m")
         
         if total_score < global_best_score:
             global_best_score = total_score
