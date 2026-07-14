@@ -5,6 +5,8 @@ import pyjson5
 import math
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from mpl_toolkits.mplot3d import art3d
+from shapely.geometry import Point, LineString, Polygon
+import shapely.affinity as affinity
 
 
 class UAVEnvironment3D:
@@ -39,6 +41,35 @@ class UAVEnvironment3D:
             o['z_min'] = o.get('z_min', 0.0)
             o['z_max'] = o.get('z_max', 20.0)
             self.obstacles.append(o)
+
+        # ==========================================
+        # 【Shapely 升级】将 JSON 几何数据预编译为 Shapely 对象
+        # ==========================================
+        self.shapely_obstacles = []
+        for obs in self.obstacles:
+            shapely_obs = obs.copy()
+            
+            if obs['type'] == 'circle':
+                # 圆形：利用 Point 缓冲生成多边形
+                shapely_obs['poly_2d'] = Point(obs['center'][:2]).buffer(obs['radius'])
+                
+            elif obs['type'] == 'rect':
+                bl = obs['bottom_left'][:2]
+                w, h = obs['width'], obs['height']
+                angle = obs.get('angle', 0.0)
+                
+                # 构建未旋转的基础矩形
+                rect = Polygon([
+                    (bl[0], bl[1]),
+                    (bl[0] + w, bl[1]),
+                    (bl[0] + w, bl[1] + h),
+                    (bl[0], bl[1] + h)
+                ])
+                # 绕左下角进行旋转
+                rotated_rect = affinity.rotate(rect, angle, origin=(bl[0], bl[1]), use_radians=False)
+                shapely_obs['poly_2d'] = rotated_rect
+                
+            self.shapely_obstacles.append(shapely_obs)
 
         # ==========================================
         # 【新增】1. 假设无人机相机水平视场角 (FOV) 为 90度
@@ -81,59 +112,66 @@ class UAVEnvironment3D:
 
     def is_point_in_obstacle(self, point, safe_margin=0.0):
         """ 
-        【核心检测】检测 3D 空间中的单点是否在障碍物内部 (包含高度判断) 
-        point 格式应为: [x, y, z]
+        【Shapely版】检测 3D 空间中的单点是否在障碍物内部
         """
-        for obs in self.obstacles:
-            # 1. 优先进行高度层 (Z轴) 筛选，不在该高度范围直接跳过
+        pt_2d = Point(point[0], point[1])
+        
+        for obs in self.shapely_obstacles:
+            # 1. Z轴高度拦截 (最廉价的计算)
             z_min = obs['z_min'] - safe_margin
             z_max = obs['z_max'] + safe_margin
             if not (z_min <= point[2] <= z_max):
                 continue
-
-            # 2. 如果高度命中，再判断 2D 投影面
-            if obs['type'] == 'circle':
-                # 仅计算 XY 平面的距离
-                dist = np.linalg.norm(point[:2] - obs['center'])
-                if dist <= (obs['radius'] + safe_margin):
-                    return True
-
-            elif obs['type'] == 'rect':
-                bl = obs['bottom_left']
-                w, h = obs['width'], obs['height']
-                angle_deg = obs.get('angle', 0.0)
                 
-                dx = point[0] - bl[0]
-                dy = point[1] - bl[1]
+            # 2. 调用 Shapely 底层 C 引擎计算 2D 距离
+            if obs['poly_2d'].distance(pt_2d) <= safe_margin:
+                return True
                 
-                theta = math.radians(-angle_deg)
-                rx = dx * math.cos(theta) - dy * math.sin(theta)
-                ry = dx * math.sin(theta) + dy * math.cos(theta)
-                
-                if -safe_margin <= rx <= w + safe_margin and -safe_margin <= ry <= h + safe_margin:
-                    return True
         return False
 
     def is_segment_collision(self, p1, p2, safe_margin=0.0, step=0.5):
         """
-        【3D线段检测】使用离散采样法检测 3D 线段(p1->p2)是否碰撞。
-        通过在无人机两点航线中以 step(米) 为步长进行插值采样。
-        这是无人机 3D 路径规划中最常用且鲁棒的做法。
+        【Shapely极速版 3D线段检测】
+        使用 Broad-phase (宽相) + Narrow-phase (窄相插值) 架构
         """
         dist = self.calculate_distance(p1, p2)
         if dist == 0:
             return self.is_point_in_obstacle(p1, safe_margin)
 
-        # 根据步长计算需要采样的点数，确保至少检测两端点
-        num_steps = max(2, int(dist / step))
+        # ==========================================
+        # 核心提速：2D 宽相检测 (Broad-phase)
+        # ==========================================
+        # 将 3D 航线直接拍扁成 2D 线段
+        line_2d = LineString([(p1[0], p1[1]), (p2[0], p2[1])])
         
+        potential_obstacles = []
+        for obs in self.shapely_obstacles:
+            # 如果在 2D 俯视图上，航线连这栋楼的边都擦不到，直接剔除！
+            if obs['poly_2d'].distance(line_2d) <= safe_margin:
+                potential_obstacles.append(obs)
+                
+        # 如果 2D 投影完全碰不到任何障碍物，航线绝对安全，直接返回！
+        # (这省去了原来 90% 以上的 3D 插值计算点)
+        if not potential_obstacles:
+            return False
+
+        # ==========================================
+        # 窄相检测：仅对有 2D 嫌疑的建筑进行 3D 高度插值判定
+        # ==========================================
+        num_steps = max(2, int(dist / step))
         for i in range(num_steps + 1):
             t = i / num_steps
-            # 3D 空间线性插值
             pt = p1 + t * (p2 - p1) 
-            if self.is_point_in_obstacle(pt, safe_margin):
-                return True
-                
+            pt_2d = Point(pt[0], pt[1])
+            
+            for obs in potential_obstacles:
+                z_min = obs['z_min'] - safe_margin
+                z_max = obs['z_max'] + safe_margin
+                # 高度穿模，并且水平面距离过近，才算真撞
+                if z_min <= pt[2] <= z_max:
+                    if obs['poly_2d'].distance(pt_2d) <= safe_margin:
+                        return True
+                        
         return False
 
     def draw_environment_3d(self, ax=None):
