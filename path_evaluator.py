@@ -8,7 +8,7 @@ import scipy.interpolate as spl
 class PathEvaluator:
     def __init__(self):
         # 实例化3D环境
-        self.env = UAVEnvironment3D('maps/zijingang.json5')
+        self.env = UAVEnvironment3D('maps/haining.json5')
         
         # 基础惩罚权重
         self.penalties = {

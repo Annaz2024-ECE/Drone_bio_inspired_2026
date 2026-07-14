@@ -3,13 +3,10 @@ from path_evaluator import PathEvaluator
 from coordinator_agent import CoordinatorAgent
 
 # 1. 导入你手上所有的仿生智能体兵器库！
-from aco_planner import ACOPlanner
-from dsaco_planner import DSACOPlanner
 from pso_planner import PSOPlanner
 from gwo_planner import GWOPlanner
 from ssa_planner import SSAPlanner
 from woa_planner_fix import WOAPlanner
-from hybrid_pso_gwo import HybridPSOGWO
 from ga_planner import GAPlanner
 
 def run_parameter_tuning_loop():
@@ -21,43 +18,39 @@ def run_parameter_tuning_loop():
     agent = CoordinatorAgent()
     
     # ==========================================
-    # 核心修改：算法字典映射与一键切换
+    # 算法字典映射与一键切换
     # ==========================================
     ALGO_MAP = {
-        "ACO": ACOPlanner,
-        "DSACO": DSACOPlanner,
         "PSO": PSOPlanner,
         "GWO": GWOPlanner,
         "SSA": SSAPlanner,
         "WOA": WOAPlanner,
-        "HybridPSOGWO": HybridPSOGWO,
         "GA": GAPlanner
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "GWO"  # 建议先用刚刚改好的 GWO 跑个 3D 测试
+    TARGET_ALGO = "GWO" 
     
     print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
     
     # ==========================================
-    # 在实例化前，就打包好正确的参数字典 (kwargs)
+    # 在实例化前，打包好正确的参数字典 (kwargs)
     # ==========================================
     kwargs = {
         'evaluator': evaluator,
-        # 3D 地图有 11 个打卡点，控制点必须大于 11，这里设为 16
-        # 紫金港的：40-50
-        'num_waypoints': 40, 
+        # 紫金港地图目标较多，控制点建议调大至 40-50 左右
+        # 海宁设置为16 比较合适
+        'num_waypoints': 16, 
         'max_iter': agent.algo_params['max_iter']
     }
     
     # 精准对接各个算法底层所需的变量名
     pop_size = agent.algo_params['pop_size']
-    if TARGET_ALGO in ["ACO", "DSACO"]: kwargs['num_ants'] = pop_size
-    elif TARGET_ALGO == "PSO": kwargs['num_particles'] = pop_size
+    if TARGET_ALGO == "PSO": kwargs['num_particles'] = pop_size
     elif TARGET_ALGO == "GWO": kwargs['num_wolves'] = pop_size
     elif TARGET_ALGO == "SSA": kwargs['num_sparrows'] = pop_size
-    elif TARGET_ALGO in ["WOA", "HybridPSOGWO"]: kwargs['pop_size'] = pop_size 
+    elif TARGET_ALGO in ["WOA"]: kwargs['pop_size'] = pop_size 
 
     # 带着正确的种群规模出生，底层 3D 矩阵直接完美生成！
     planner = PlannerClass(**kwargs)
@@ -66,6 +59,7 @@ def run_parameter_tuning_loop():
     
     for round_idx in range(1, meta_rounds + 1):
         print(f"\n>>>>>>>>>>>>  第 {round_idx} 轮 3D 调优测试 [{TARGET_ALGO}] >>>>>>>>>>>>")
+        
         # 在改了规则后，重新核算历史最佳路线的基准分
         if round_idx > 1 and hasattr(planner, 'historical_best_pos'):
             # 拿老路线在新评价器里跑一次，获取当前规则下的真实分数
@@ -91,7 +85,7 @@ def run_parameter_tuning_loop():
             
         # 3. 提交给老中医，获取更新后的三个字典，以及是否结束的信号
         if round_idx < meta_rounds:
-            # 接收新增的第四个返回值
+            # 接收模块化 Agent 返回的字典 (融合了宏观物理与微观数学)
             algo_params, eval_params, specific_params, is_finished = agent.analyze_and_act(final_score, details, env_info, TARGET_ALGO)
             
             # 接收到提前交卷信号，直接跳出循环
@@ -102,27 +96,27 @@ def run_parameter_tuning_loop():
             # 【A】更新评价器参数
             evaluator.update_params(new_params=eval_params)
             
-            # 【B】更新算法共性参数 (迭代次数可以随便改，但实体矩阵的种群规模不能中途改)
+            # 【B】更新算法共性参数 (强制保护矩阵维度)
             planner.max_iter = algo_params['max_iter']
             
             if TARGET_ALGO in ["ACO", "DSACO"]:
-                # 只有 ACO/DSACO 这种离散算法，每代会重新撒蚂蚁，才允许中途无缝加兵力
                 planner.num_ants = algo_params['pop_size']
             else:
-                # 连续型算法 (PSO/GWO/SSA/WOA) 含有固定矩阵，禁止中途加人！
-                # 强制把老中医字典里的 pop_size 改回底层原本的真实人数，防止老中医自己记错账
                 current_pop = getattr(planner, 'num_particles', 
                               getattr(planner, 'num_wolves', 
                               getattr(planner, 'num_sparrows', 
                               getattr(planner, 'pop_size', 50))))
-                
                 algo_params['pop_size'] = current_pop
             
-            # 【C】动态注入算法“专属参数”！
+            # ==========================================
+            # 【C】核心修复：强制参数注入！
+            # 删除了 hasattr 的限制，直接强制写入底层对象！
+            # 这样 apply_laplacian 和 apply_repulsion 才能完美下发生效！
+            # ==========================================
             for param_key, param_value in specific_params.items():
-                if hasattr(planner, param_key):
-                    setattr(planner, param_key, param_value)
-                    print(f"  └──  [专属参数调整] 成功将 {TARGET_ALGO} 的 {param_key} 设为 {param_value}")
+                setattr(planner, param_key, param_value)
+                print(f"  └──  [参数下发] 成功将底层 {param_key} 设为 {param_value}")
+            # ==========================================
 
     # ==========================================
     #  所有调参轮次彻底结束后，输出终极图表
