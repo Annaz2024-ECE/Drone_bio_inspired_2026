@@ -20,15 +20,20 @@ class PathEvaluator:
             'altitude_violation': 50000.0,
             'boundary_violation': 50000.0,
             'pitch_violation': 20000.0,
-            'loop_violation': 15000.0
+            'loop_violation': 15000.0,
+            # 机动变化功率 (Change Power) 的超标惩罚乘数
+            'change_power_penalty': 8000.0 
         }
 
         self.params = {
             'max_turn_angle': 120.0,
             'max_pitch_angle': 45.0,
-            'bspline_num_points': 100,   # B-Spline 参数
+            'bspline_num_points': 100,   
             'min_waypoint_dist': 5.0,
-            'margin_layers': [0.5, 0.2]
+            'margin_layers': [0.5, 0.2],
+            # 能耗物理学参数
+            'v_cruise': 13.17,         # 假设最佳巡航速度为 13.17m/s
+            'accel_threshold': 2.0    # 允许的最大合理加速度 2.0m/s^2 ，超过即视为急刹车/急加速
         }
         
         self.ideal_min_distance = self._calculate_ideal_min_distance()
@@ -51,27 +56,11 @@ class PathEvaluator:
             dist += self.env.calculate_distance(pts[i], pts[i+1])
         return dist
 
-    # ==========================================
-    # 新增下面这个方法：用于接收智能体的目标裁剪指令并刷新全局参数
-    # ==========================================
-    def update_env_targets(self, new_targets):
-        """ 
-        动态目标裁剪同步接口：更新环境目标，并重新计算理论最短距离 
-        """
-        self.env.target_areas = new_targets
-        # 重新计算剔除目标后的最短距离
-        self.ideal_min_distance = self._calculate_ideal_min_distance()
-        print(f" [环境同步] 气象裁剪完成！当前3D地图理论最短直线距离已刷新为: \033[92m{self.ideal_min_distance:.1f} 米\033[0m")
-
     def update_params(self, new_penalties=None, new_params=None):
         if new_penalties: self.penalties.update(new_penalties)
         if new_params: self.params.update(new_params)
 
     def generate_bspline_path(self, waypoints, num_points=100):
-        """ 
-        【全面升级为 3D B-Spline 插值算法】 
-        极致平滑，二阶导数连续，符合真实无人机空气动力学飞行轨迹。
-        """
         waypoints = np.array(waypoints)
         
         unique_waypoints = [waypoints[0]]
@@ -97,10 +86,7 @@ class PathEvaluator:
 
         smooth_path = np.column_stack((x_new, y_new, z_new))
 
-        # 任何平滑过冲导致的负数高度，全部托底到 0.1 米（贴地皮）
-        smooth_path[:, 2] = np.clip(smooth_path[:, 2], 0.1, self.env.z_bounds[1]) # 顺便顺手把天花板也卡死
-        
-        # X 和 Y 轴的绝对硬裁剪，利用环境里的 bounds，确保平滑轨迹也绝不出界
+        smooth_path[:, 2] = np.clip(smooth_path[:, 2], 0.1, self.env.z_bounds[1]) 
         smooth_path[:, 0] = np.clip(smooth_path[:, 0], self.env.x_bounds[0], self.env.x_bounds[1])
         smooth_path[:, 1] = np.clip(smooth_path[:, 1], self.env.y_bounds[0], self.env.y_bounds[1])
         
@@ -132,22 +118,11 @@ class PathEvaluator:
 
     def calculate_pitch_angle(self, p1, p2):
         vec = p2 - p1
-        dz = vec[2] # Z轴上的高度差
+        dz = vec[2] 
         dist_3d = np.linalg.norm(vec)
         if dist_3d == 0: return 0.0
-        # 利用反正弦函数计算夹角
         pitch_rad = np.arcsin(np.clip(dz / dist_3d, -1.0, 1.0))
         return np.abs(np.degrees(pitch_rad))
-
-    def point_to_segment_distance(self, point, seg_a, seg_b):
-        line_vec = seg_b - seg_a
-        point_vec = point - seg_a
-        line_len_sq = np.dot(line_vec, line_vec)
-        if line_len_sq == 0:
-            return np.linalg.norm(point - seg_a)
-        t = max(0.0, min(1.0, np.dot(point_vec, line_vec) / line_len_sq))
-        projection = seg_a + t * line_vec
-        return np.linalg.norm(point - projection)
 
     def calculate_target_penalty(self, path_points):
         total_target_penalty = 0.0
@@ -187,12 +162,8 @@ class PathEvaluator:
                         min_missed_dist = total_missed
             
             if min_missed_dist > 0.1: 
-                # 动态读取惩罚值，如果没有被 Agent 修改，就默认使用你的阶梯惩罚
-                # 恢复原本纯粹且公平的线性惩罚逻辑
                 base_pen = self.penalties.get('missed_target_base', 500000.0)
                 factor_pen = self.penalties.get('missed_target_factor', 20000.0)
-                
-                # （距离 * 系数）
                 total_target_penalty += base_pen + (min_missed_dist * factor_pen)
                 
         return total_target_penalty
@@ -208,97 +179,96 @@ class PathEvaluator:
             'altitude_violation': 0.0,
             'boundary_violation': 0.0,
             'gravity_cost': 0.0,
-            'pitch_violation': 0.0, # 记录俯仰角违规扣分
-            'loop_penalty': 0.0
+            'pitch_violation': 0.0,
+            'loop_penalty': 0.0,
+            'base_energy_cost': 0.0,   # 出生自带的固定能耗
+            'change_power_pen': 0.0    # 机动变化功率(急停急加)超标罚分
         }
 
-        # 1. 距离算分
-        details['distance'] = self.calculate_path_length(path_points)
+        # 先算总距离
+        total_dist = self.calculate_path_length(path_points)
+        details['distance'] = total_dist
         
-        # 清理了重复定义的冗余代码
+        # ==========================================
+        # 大招四：PECM 广义推进能耗几何映射模型
+        # ==========================================
+        v = self.params.get('v_cruise', 13.17)
+        
+        # 1. 常规基础能耗 (起降悬停 + 寄生阻力 + 诱导阻力)
+        # 根据公式：寄生正比于 v^3, 诱导反比于 v。此处用常数系数代替空气动力学实参。
+        c_parasite = 0.1
+        c_induced = 150.0
+        P_cruise = c_parasite * (v**3) + c_induced * (1/v)
+        
+        time_flight = total_dist / v
+        E_base = 2000.0  # 起降通讯等固定开销
+        E_cruise = P_cruise * time_flight
+        details['base_energy_cost'] = E_base + E_cruise
+        
+        # 2. 机动变化功率 (Change Power) 罚分 
+        accel_threshold = self.params.get('accel_threshold', 2.5)
+        change_power_multiplier = self.penalties.get('change_power_penalty', 8000.0)
+        
+        # ==========================================
+
         margin_layers = self.params.get('margin_layers', [0.5, 0.2])
         layer_penalty = self.penalties.get('margin_violation', 5000.0) / len(margin_layers)
         bound_penalty = self.penalties.get('boundary_violation', 50000.0)
         alt_penalty = self.penalties.get('altitude_violation', 50000.0)
         fatal_penalty = self.penalties.get('fatal_collision', 1000000.0)
 
-        # 2. 空域与四周边界管制检测
+        # 1. 空域与四周边界管制检测
         for i in range(len(path_points)):
             pt = path_points[i]
-            
-            # 2.1 垂直空域管制（钻地或冲天）
             if pt[2] < 0:
                 details['fatal_collision'] += fatal_penalty
             elif pt[2] > self.env.z_bounds[1]:
                 details['altitude_violation'] += alt_penalty
-                
-            # 2.2 X 轴水平越界检测
             if pt[0] < self.env.x_bounds[0] or pt[0] > self.env.x_bounds[1]:
                 details['boundary_violation'] += bound_penalty
-                
-            # 2.3 Y 轴水平越界检测
             if pt[1] < self.env.y_bounds[0] or pt[1] > self.env.y_bounds[1]:
                 details['boundary_violation'] += bound_penalty
 
-        #  防绕圈/防自相交检测 (Anti-Looping)
+        # 绕圈/防自相交检测 (Anti-Looping)
         N = len(path_points)
-        time_gap = 15  # 时间差：如果在相隔 15 个点之外
-        loop_radius = 5.0 # 空间差：距离又近于 5 米，那就是纯纯的绕圈
+        time_gap = 15  
+        loop_radius = 5.0 
         
         if N > time_gap:
-            # 利用 numpy 上三角矩阵快速提取所有索引差 > time_gap 的点对
             i_idx, j_idx = np.triu_indices(N, k=time_gap)
-            
-            # 向量化计算所有这些点对之间的 3D 距离 (计算速度是 for 循环的 100 倍)
             dists = np.linalg.norm(path_points[i_idx] - path_points[j_idx], axis=1)
-            
-            # 找出那些“时间过了很久，却又回到原地附近”的违规点对
             loop_count = np.sum(dists < loop_radius)
             if loop_count > 0:
                 details['loop_penalty'] += loop_count * self.penalties.get('loop_violation', 15000.0)
 
-        # SFJ (Straight Flight Judgment) 快筛雷达
-        # 极大降低 CPU 算力消耗，为 B-Spline 微小线段办理“免检通行证”
+        # SFJ 快筛雷达
         sfj_safe_segments = [False] * (len(path_points) - 1)
-        jump_step = 10  # SFJ 探测步长：一次性往后看 10 步 (宏观视野)
+        jump_step = 10  
         
         for i in range(0, len(path_points) - jump_step, jump_step):
             p_start = path_points[i]
             p_end = path_points[i + jump_step]
-            
-            # 使用稍微大一圈的安全余量 (比如 2.0米)，做一次宏观视距(LoS)判断
-            # 如果这条长直线是完全畅通的，说明这一大片空域没有任何障碍物！
             if not self.env.is_segment_collision(p_start, p_end, safe_margin=2.0):
-                # 探测安全！给中间这 10 个小线段全部盖上“免检”钢印！
                 for j in range(i, i + jump_step):
                     sfj_safe_segments[j] = True
 
+        # 逐段精细计算
         for i in range(len(path_points) - 1):
             p1 = path_points[i]
             p2 = path_points[i+1]
             
-            # 物理线段积分法 (能耗 = 航段长度 × 平均高度)
             segment_dist = np.linalg.norm(p2 - p1)
             avg_height = (p1[2] + p2[2]) / 2.0
-            
             if avg_height > 0:
-                # 无论线段被切得多碎，这段物理距离的积分面积永远恒定！
-                # 乘以 1.5 是为了让分数规模和以前保持在同一个数量级
                 details['gravity_cost'] += avg_height * segment_dist * 1.5
 
-            # 每段飞行路线的物理俯仰角检测 (保持你之前的代码不变)
             pitch = self.calculate_pitch_angle(p1, p2)
             if pitch > self.params.get('max_pitch_angle', 45.0):
-                # 累加惩罚：超出越多，惩罚越狠 (二次方惩罚)
                 details['pitch_violation'] += self.penalties.get('pitch_violation', 20000.0) * ((pitch - 45.0) / 10.0)
 
-            # ==========================================
-            # SFJ 偷懒判断发威！
             if sfj_safe_segments[i]:
-                continue # 有 SFJ 护航说明周围绝对没有大楼，直接跳过极其耗时的几何障碍物遍历检测！
-            # ==========================================
+                continue 
 
-            # 只有在 SFJ 没敢打包票的地方，才启动复杂的避障排雷算法
             if self.env.is_segment_collision(p1, p2, safe_margin=0.0):
                 details['fatal_collision'] += fatal_penalty
                 continue 
@@ -310,18 +280,39 @@ class PathEvaluator:
                 if self.env.is_segment_collision(p1, p2, safe_margin=m):
                     details['margin_violation'] += layer_penalty
 
-        # 3. 急转弯计算
+        # 急转弯计算 & 机动变化功率(Change Power)计算
         max_turn = self.params.get('max_turn_angle', 120.0)
         sharp_turn_pen = self.penalties.get('sharp_turn', 10000.0)
 
         for i in range(len(path_points) - 2):
-            angle = self.calculate_turn_angle(path_points[i], path_points[i+1], path_points[i+2])
+            p_prev = path_points[i]
+            p_curr = path_points[i+1]
+            p_next = path_points[i+2]
+            
+            angle = self.calculate_turn_angle(p_prev, p_curr, p_next)
             if angle > 10.0: 
                 details['smoothness'] += ((angle - 10.0) ** 2) * 0.2
             if angle > max_turn:
                 details['sharp_turn'] += sharp_turn_pen
+                
+            # PECM: 几何向运动学的神级映射
+            # 1. 用转角算出速度矢量的改变 (delta_v ≈ v * 弧度)
+            delta_v = v * np.radians(angle)
+            
+            # 2. 算这段时间 (dt ≈ 段距离 / v)
+            dist_seg = np.linalg.norm(p_curr - p_prev)
+            dt = dist_seg / v if dist_seg > 0 else 0.1
+            
+            # 3. 算出该航段所逼出的向心加速度 / 减速加速度
+            accel = delta_v / dt
+            
+            # 4. 如果加速度在安全阈值内，视为正常平滑机动，耗电极少不予扣分；
+            #    如果超出阈值，暴增的电机电流 (P_change) 与加速度的平方成正比！
+            if accel > accel_threshold:
+                excess_accel = accel - accel_threshold
+                details['change_power_pen'] += (excess_accel ** 2) * change_power_multiplier
 
-        # 4. 3D 悬空圆柱打卡检测
+        # 3D 悬空圆柱打卡检测
         details['missed_target'] += self.calculate_target_penalty(path_points)
 
         env_info = {
@@ -333,73 +324,13 @@ class PathEvaluator:
         return total_score, details, env_info
 
     def evaluate_pso_particle(self, raw_waypoints):
-        # 1. 提取控制点之间的间距惩罚 (保留对底层基因的排斥判定)
         spacing_penalty = self.calculate_spacing_penalty(raw_waypoints)
         
-        # 强制写死 100 个点作为唯一的绝对公平基准！
-        # 绝不读取 params 里的动态配置，防止 Agent 乱改导致分数通货膨胀！
         num_pts = 100 
         smooth_path = self.generate_bspline_path(raw_waypoints, num_points=num_pts)
         
         base_score, smooth_details, env_info = self.calculate_fitness(smooth_path)
-        
-        # 3. 补上底层基因的间距惩罚
         smooth_details['spacing_penalty'] = spacing_penalty
         total_score = sum(smooth_details.values())
         
         return total_score, smooth_details, env_info
-# ==========================================
-# 3D 测试用例 
-# ==========================================
-if __name__ == "__main__":
-    evaluator = PathEvaluator()
-    
-    path_3d_safe = np.array([[43.0, 3.0, 30.0], [43.0, 50.0, 30.0], [51.0, 94.0, 30.0]])
-    path_3d_crash = np.array([[43.0, 3.0, 5.0], [43.0, 50.0, 5.0], [51.0, 94.0, 5.0]])
-    path_3d_underground = np.array([[43.0, 3.0, 30.0], [43.0, 50.0, -5.0], [51.0, 94.0, 30.0]])
-
-    test_cases = [
-        ("高空安全直达 (完美路线)", path_3d_safe),
-        ("低空莽夫直飞 (撞大楼)", path_3d_crash),
-        ("遁地路线 (钻入地下)", path_3d_underground)
-    ]
-
-    print("=" * 50)
-    print("开始执行 3D 评价器黑盒压力测试...")
-    print("=" * 50)
-
-    for name, raw_path in test_cases:
-        score, details, env_info = evaluator.evaluate_pso_particle(raw_path)
-        
-        print(f"【{name}】")
-        if score > 5000:
-            print(f"   最终得分: \033[91m{score:,.2f}\033[0m")
-        else:
-            print(f"   最终得分: \033[92m{score:,.2f}\033[0m (安全无误！)")
-            
-        print("   >>> 状态明细(State):")
-        for k, v in details.items():
-            if v > 0: 
-                color = "\033[91m" if v > 1000 else "\033[0m" 
-                print(f"       - {k}: {color}{v:,.2f}\033[0m")
-        print("-" * 50)
-
-    path_to_draw = path_3d_safe 
-    smooth_path_to_draw = evaluator.generate_bspline_path(path_to_draw, num_points=100)
-    
-    fig = plt.figure(figsize=(12, 10))
-    ax = fig.add_subplot(111, projection='3d') 
-    
-    evaluator.env.draw_environment_3d(ax)
-    
-    ax.plot(path_to_draw[:, 0], path_to_draw[:, 1], path_to_draw[:, 2], 
-            color='gray', linestyle='--', linewidth=2, marker='x', markersize=8, label='Original Waypoints')
-            
-    ax.plot(smooth_path_to_draw[:, 0], smooth_path_to_draw[:, 1], smooth_path_to_draw[:, 2], 
-            color='#FF007F', linestyle='-', linewidth=3, label='B-Spline Smooth Path')
-            
-    ax.set_title("3D UAV Path Visualization (B-Spline)", fontsize=14, fontweight='bold')
-    ax.legend(loc='upper right')
-    
-    plt.tight_layout()
-    plt.show()
