@@ -7,18 +7,19 @@ class CoordinatorAgent:
         self.eval_params = {
             'bspline_num_points': 100, 
             'min_waypoint_dist': 5.0,
-            'max_turn_angle': 120.0  
+            'max_turn_angle': 120.0,
+            'v_cruise': 13.17
         }
         self.meta_iteration = 0
         self.stuck_counter = 0
         self.last_score = float('inf')
 
-        # 【新增】：专门用来记忆上一次下发的微观算法参数
+        # 专门用来记忆上一次下发的微观算法参数
         self.last_specific_params = {}
 
     def analyze_and_act(self, total_score, details, env_info, current_algo):
         # ==========================================
-        # 【新增】：调参前，先给所有当前参数“拍照存档”
+        # 调参前，先给所有当前参数“拍照存档”
         # ==========================================
         old_algo_params = self.algo_params.copy()
         old_eval_params = self.eval_params.copy()
@@ -106,6 +107,22 @@ class CoordinatorAgent:
             if details.get('fatal_collision', 0) > 0 and self.algo_params['max_iter'] < 500:
                 self.algo_params['max_iter'] += 50
                 actions_taken.append("MACRO (算力): INCREASE_MAX_ITER (延长规避计算工期)")
+
+        # ==========================================
+        # 宏观调控三：能耗与时间的“自动换挡”博弈 (Auto-Gearbox)
+        # ==========================================
+        change_power = details.get('change_power_pen', 0)
+        current_v = self.eval_params['v_cruise']
+        
+        # 降挡逻辑：如果机动耗电爆炸，且速度还有下降空间（底线保底为 8.0m/s 防止不动）
+        if change_power > 50000 and current_v > 8.0:
+            self.eval_params['v_cruise'] = max(8.0, current_v - 1.5) # 每次踩 1.5 的刹车
+            actions_taken.append(f"MACRO (能耗): 机动耗电爆炸！全局降速至 {self.eval_params['v_cruise']:.2f} m/s 缓解转弯压力！")
+            
+        # 升挡逻辑：如果机动耗电很小（证明路线已平滑），为了降低时间惩罚，踩油门恢复速度！
+        elif change_power < 15000 and current_v < 13.17:
+            self.eval_params['v_cruise'] = min(13.17, current_v + 1.0) # 每次踩 1.0 的油门
+            actions_taken.append(f"MACRO (能耗): 路线已平滑，加速至 {self.eval_params['v_cruise']:.2f} m/s 减少飞行时间惩罚！")
 
         # ==========================================
         # 微观调控：动态加载算法专属的内部参数特工 (Algorithm Internal Tuning)

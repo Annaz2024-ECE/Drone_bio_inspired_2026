@@ -22,7 +22,9 @@ class PathEvaluator:
             'pitch_violation': 20000.0,
             'loop_violation': 15000.0,
             # 机动变化功率的惩罚系数 (已大幅下调，配合新版逻辑)
-            'change_power_penalty': 50.0 
+            'change_power_penalty': 20.0,
+            # 新增：时间惩罚权重 (每飞行1秒扣 10 分)
+            'time_penalty_factor': 10.0
         }
 
         self.params = {
@@ -186,6 +188,7 @@ class PathEvaluator:
                 
         return v_cruise
 
+
     def calculate_fitness(self, path_points):
         details = {
             'distance': 0.0,          
@@ -200,7 +203,8 @@ class PathEvaluator:
             'pitch_violation': 0.0,
             'loop_penalty': 0.0,
             'base_energy_cost': 0.0,   
-            'change_power_pen': 0.0    
+            'change_power_pen': 0.0,
+            'time_cost': 0.0   
         }
 
         # 先算总距离
@@ -213,7 +217,10 @@ class PathEvaluator:
         c_parasite = 0.1
         c_induced = 150.0
         P_cruise = c_parasite * (v_cruise**3) + c_induced * (1/v_cruise)
-        time_flight_est = total_dist / v_cruise 
+        time_flight_est = total_dist / v_cruise
+
+        time_factor = self.penalties.get('time_penalty_factor', 100.0)
+        details['time_cost'] = time_flight_est * time_factor 
         
         E_base = 2000.0 
         E_task = len(self.env.target_areas) * 500.0 # 每个打卡点的并发通信耗电
