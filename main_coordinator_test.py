@@ -75,7 +75,7 @@ def run_parameter_tuning_loop():
         # 在改了规则后，重新核算历史最佳路线的基准分
         if round_idx > 1 and hasattr(planner, 'historical_best_pos'):
             # 拿老路线在新评价器里跑一次，获取当前规则下的真实分数
-            true_benchmark, _, _ = evaluator.evaluate_pso_particle(planner._decode_path(planner.historical_best_pos))
+            true_benchmark, _, _ = evaluator.evaluate_particle(planner._decode_path(planner.historical_best_pos))
             # 刷新算法的记忆
             planner.historical_best_score = true_benchmark
             
@@ -93,7 +93,7 @@ def run_parameter_tuning_loop():
        # full_convergence_history.extend(history)
         
         # 2. 终极体检
-        final_score, details, env_info = evaluator.evaluate_pso_particle(best_path)
+        final_score, details, env_info = evaluator.evaluate_particle(best_path)
         
         print(f"\n [本轮结算] 3D 最终得分: {final_score:,.2f}")
         for k, v in details.items():

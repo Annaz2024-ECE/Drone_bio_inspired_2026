@@ -323,7 +323,7 @@ class PathEvaluator:
         total_score = sum(details.values())
         return total_score, details, env_info
 
-    def evaluate_pso_particle(self, raw_waypoints):
+    def evaluate_particle(self, raw_waypoints):
         spacing_penalty = self.calculate_spacing_penalty(raw_waypoints)
         
         num_pts = 100 
