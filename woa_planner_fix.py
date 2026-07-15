@@ -4,11 +4,20 @@ import time
 from base_planner import BasePlanner
 
 class WOAPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_waypoints=25, pop_size=60, max_iter=200):
+    def __init__(self, evaluator=None, num_waypoints=25, pop_size=20, max_iter=200):
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
-        
+        # 【适配 Agent 修改 1】：显式声明 Agent 会动态篡改的专属参数/开关
+        # 防止 main_coordinator_test.py 执行 setattr 时报错
+        # ==========================================================
+        self.emergency_escape = False 
+        self.radar_guidance = False
+        self.press_down = False       
+        self.lift_up = False          
+        self.apply_laplacian = False  
+        self.apply_repulsion = False
+
         self.pop_size = pop_size
-        self.positions = np.random.uniform(self.lb, self.ub, (self.pop_size, self.dim))
+        #self.positions = np.random.uniform(self.lb, self.ub, (self.pop_size, self.dim))
         self.top_30_percent = int(self.pop_size * 0.3)
         
         #动态提取 JSON 中的 3D 巡检目标点
@@ -144,13 +153,19 @@ class WOAPlanner(BasePlanner):
                 # 因为在评估时，_decode_path 会用贪心算法自动帮它们理顺！
                 self.positions[i, :] = waypoints_temp.flatten()
 
-                # 评估新位置
+            self.execute_universal_physics_directives()
+
+            for i in range(self.pop_size):
+           # 评估新位置
                 path = self._decode_path(self.positions[i, :])
                 score, _, _ = self.evaluator.evaluate_pso_particle(path)
 
                 if score < self.historical_best_score and np.any(self.positions[i,:]):
                     self.historical_best_score = score
-                    self.historical_best_pos = self.positions[i, :].copy()
+                    self.historical_best_pos = self.positions[i, :].copy()     
+                    
+
+            
 
             self.convergence_curve.append(self.historical_best_score)
             
@@ -162,7 +177,7 @@ class WOAPlanner(BasePlanner):
 if __name__ == "__main__":
     start_time = time.time()  # 记录起点时间
     # 建议航点数至少大于等于目标区域数量 (haining.json5 中有 11 个 target)
-    planner = WOAPlanner(num_waypoints=20, pop_size=60, max_iter=200)
+    planner = WOAPlanner(num_waypoints=25, pop_size=60, max_iter=200)
     
     best_path, convergence_history = planner.optimize()
     

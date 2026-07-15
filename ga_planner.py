@@ -13,7 +13,16 @@ class GAPlanner(BasePlanner):
         :param tournament_size: 锦标赛选择的竞争者数量
         """
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
-        
+        # 【适配 Agent 修改 1】：显式声明 Agent 会动态篡改的专属参数/开关
+        # 防止 main_coordinator_test.py 执行 setattr 时报错
+        # ==========================================================
+        self.emergency_escape = False 
+        self.radar_guidance = False
+        self.press_down = False       
+        self.lift_up = False          
+        self.apply_laplacian = False  
+        self.apply_repulsion = False
+
         self.pop_size = pop_size
         self.pc = pc
         self.pm = pm
@@ -176,6 +185,8 @@ class GAPlanner(BasePlanner):
                 
             # 截断多余的个体（处理 pop_size 为奇数的情况）
             self.population = np.array(new_population[:self.pop_size])
+            
+            self.execute_universal_physics_directives()
             
             # 3. 评估新种群
             results = list(executor.map(self._evaluate_single, self.population))

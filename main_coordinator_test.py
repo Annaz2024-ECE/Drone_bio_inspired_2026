@@ -31,7 +31,7 @@ def run_parameter_tuning_loop():
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "GWO" 
+    TARGET_ALGO = "WOA" 
     
     print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
