@@ -8,7 +8,7 @@ import scipy.interpolate as spl
 class PathEvaluator:
     def __init__(self):
         # 实例化3D环境
-        self.env = UAVEnvironment3D('maps/haining.json5')
+        self.env = UAVEnvironment3D('maps/haining.json5') # 假设你现在跑紫金港
         
         # 基础惩罚权重
         self.penalties = {
@@ -21,8 +21,8 @@ class PathEvaluator:
             'boundary_violation': 50000.0,
             'pitch_violation': 20000.0,
             'loop_violation': 15000.0,
-            # 机动变化功率 (Change Power) 的超标惩罚乘数
-            'change_power_penalty': 80.0 
+            # 机动变化功率的惩罚系数 (已大幅下调，配合新版逻辑)
+            'change_power_penalty': 50.0 
         }
 
         self.params = {
@@ -32,8 +32,9 @@ class PathEvaluator:
             'min_waypoint_dist': 5.0,
             'margin_layers': [0.5, 0.2],
             # 能耗物理学参数
-            'v_cruise': 13.17,         # 假设最佳巡航速度为 13.17m/s
-            'accel_threshold': 2.0    # 允许的最大合理加速度 2.0m/s^2 ，超过即视为急刹车/急加速
+            'v_cruise': 13.17,        # 巡航最佳速度
+            'v_inspection': 5.0,      # 巡检打卡时的低速模式
+            'accel_threshold': 2.0    # 最大合理加速度 2.0m/s^2
         }
         
         self.ideal_min_distance = self._calculate_ideal_min_distance()
@@ -168,6 +169,23 @@ class PathEvaluator:
                 
         return total_target_penalty
 
+    # ==========================================
+    # 感知环境，自动进行限速降挡
+    # ==========================================
+    def _get_local_speed(self, pt):
+        """ 检测当前点是否在打卡点外围，如果是，强行降速到 5.0 """
+        v_cruise = self.params.get('v_cruise', 13.17)
+        v_inspection = self.params.get('v_inspection', 5.0)
+        
+        for target in self.env.target_areas:
+            center_2d = target['center'][:2]
+            radius = target['radius']
+            # 只要进入目标半径的 3 倍范围内（提前减速区），就切到 5.0m/s
+            if np.linalg.norm(pt[:2] - center_2d) <= radius * 3.0:
+                return v_inspection
+                
+        return v_cruise
+
     def calculate_fitness(self, path_points):
         details = {
             'distance': 0.0,          
@@ -181,43 +199,38 @@ class PathEvaluator:
             'gravity_cost': 0.0,
             'pitch_violation': 0.0,
             'loop_penalty': 0.0,
-            'base_energy_cost': 0.0,   # 出生自带的固定能耗
-            'change_power_pen': 0.0    # 机动变化功率(急停急加)超标罚分
+            'base_energy_cost': 0.0,   
+            'change_power_pen': 0.0    
         }
 
         # 先算总距离
         total_dist = self.calculate_path_length(path_points)
         details['distance'] = total_dist
         
-        # ==========================================
-        # 大招四：PECM 广义推进能耗几何映射模型
-        # ==========================================
-        v = self.params.get('v_cruise', 13.17)
+        v_cruise = self.params.get('v_cruise', 13.17)
         
-        # 1. 常规基础能耗 (起降悬停 + 寄生阻力 + 诱导阻力)
-        # 根据公式：寄生正比于 v^3, 诱导反比于 v。此处用常数系数代替空气动力学实参。
+        # 1. 稳态基础能耗 + 任务通信能耗
         c_parasite = 0.1
         c_induced = 150.0
-        P_cruise = c_parasite * (v**3) + c_induced * (1/v)
+        P_cruise = c_parasite * (v_cruise**3) + c_induced * (1/v_cruise)
+        time_flight_est = total_dist / v_cruise 
         
-        time_flight = total_dist / v
-        E_base = 2000.0  # 起降通讯等固定开销
-        E_cruise = P_cruise * time_flight
-        details['base_energy_cost'] = E_base + E_cruise
+        E_base = 2000.0 
+        E_task = len(self.env.target_areas) * 500.0 # 每个打卡点的并发通信耗电
+        E_cruise = P_cruise * time_flight_est
         
-        # 2. 机动变化功率 (Change Power) 罚分 
-        accel_threshold = self.params.get('accel_threshold', 2.5)
-        change_power_multiplier = self.penalties.get('change_power_penalty', 8000.0)
+        details['base_energy_cost'] = E_base + E_task + E_cruise
         
-        # ==========================================
-
+        accel_threshold = self.params.get('accel_threshold', 2.0)
+        change_power_multiplier = self.penalties.get('change_power_penalty', 50.0)
+        
         margin_layers = self.params.get('margin_layers', [0.5, 0.2])
         layer_penalty = self.penalties.get('margin_violation', 5000.0) / len(margin_layers)
         bound_penalty = self.penalties.get('boundary_violation', 50000.0)
         alt_penalty = self.penalties.get('altitude_violation', 50000.0)
         fatal_penalty = self.penalties.get('fatal_collision', 1000000.0)
 
-        # 1. 空域与四周边界管制检测
+        # 边界与底线安全
         for i in range(len(path_points)):
             pt = path_points[i]
             if pt[2] < 0:
@@ -229,11 +242,10 @@ class PathEvaluator:
             if pt[1] < self.env.y_bounds[0] or pt[1] > self.env.y_bounds[1]:
                 details['boundary_violation'] += bound_penalty
 
-        # 绕圈/防自相交检测 (Anti-Looping)
+        # 防绕圈
         N = len(path_points)
         time_gap = 15  
         loop_radius = 5.0 
-        
         if N > time_gap:
             i_idx, j_idx = np.triu_indices(N, k=time_gap)
             dists = np.linalg.norm(path_points[i_idx] - path_points[j_idx], axis=1)
@@ -241,10 +253,9 @@ class PathEvaluator:
             if loop_count > 0:
                 details['loop_penalty'] += loop_count * self.penalties.get('loop_violation', 15000.0)
 
-        # SFJ 快筛雷达
+        # 雷达快筛
         sfj_safe_segments = [False] * (len(path_points) - 1)
         jump_step = 10  
-        
         for i in range(0, len(path_points) - jump_step, jump_step):
             p_start = path_points[i]
             p_end = path_points[i + jump_step]
@@ -252,7 +263,6 @@ class PathEvaluator:
                 for j in range(i, i + jump_step):
                     sfj_safe_segments[j] = True
 
-        # 逐段精细计算
         for i in range(len(path_points) - 1):
             p1 = path_points[i]
             p2 = path_points[i+1]
@@ -266,21 +276,18 @@ class PathEvaluator:
             if pitch > self.params.get('max_pitch_angle', 45.0):
                 details['pitch_violation'] += self.penalties.get('pitch_violation', 20000.0) * ((pitch - 45.0) / 10.0)
 
-            if sfj_safe_segments[i]:
-                continue 
-
+            if sfj_safe_segments[i]: continue 
             if self.env.is_segment_collision(p1, p2, safe_margin=0.0):
                 details['fatal_collision'] += fatal_penalty
                 continue 
-                
-            if not self.env.is_segment_collision(p1, p2, safe_margin=0.5):
-                continue
-
+            if not self.env.is_segment_collision(p1, p2, safe_margin=0.5): continue
             for m in margin_layers:
                 if self.env.is_segment_collision(p1, p2, safe_margin=m):
                     details['margin_violation'] += layer_penalty
 
-        # 急转弯计算 & 机动变化功率(Change Power)计算
+        # ==========================================
+        # 急转弯 & 动态限速能耗计算 (修正爆炸 Bug)
+        # ==========================================
         max_turn = self.params.get('max_turn_angle', 120.0)
         sharp_turn_pen = self.penalties.get('sharp_turn', 10000.0)
 
@@ -295,24 +302,29 @@ class PathEvaluator:
             if angle > max_turn:
                 details['sharp_turn'] += sharp_turn_pen
                 
-            # PECM: 几何向运动学的神级映射
-            # 1. 用转角算出速度矢量的改变 (delta_v ≈ v * 弧度)
-            delta_v = v * np.radians(angle)
+            # 1. 读取当前区域应该保持的速度 (外面13.17，里面5.0)
+            v_local = self._get_local_speed(p_curr)
             
-            # 2. 算这段时间 (dt ≈ 段距离 / v)
+            delta_v = v_local * np.radians(angle)
             dist_seg = np.linalg.norm(p_curr - p_prev)
-            dt = dist_seg / v if dist_seg > 0 else 0.1
             
-            # 3. 算出该航段所逼出的向心加速度 / 减速加速度
-            accel = delta_v / dt
+            # 设定计算距离底线！
+            # B样条会生成非常密集的点，dist_seg接近于0会导致加速度趋于无穷大
+            dist_seg = max(dist_seg, 0.5) 
             
-            # 4. 如果加速度在安全阈值内，视为正常平滑机动，耗电极少不予扣分；
-            #    如果超出阈值，暴增的电机电流 (P_change) 与加速度的平方成正比！
+            dt = dist_seg / v_local
+            accel = delta_v / dt  # 向心机动加速度
+            
+            # 新版双层惩罚机制
             if accel > accel_threshold:
+                # 严重超标：平方级暴击惩罚 (急加急刹)
                 excess_accel = accel - accel_threshold
                 details['change_power_pen'] += (excess_accel ** 2) * change_power_multiplier
+            elif accel > 0.1:
+                # 没超标但有加速度(比如微小转弯)：极小的线性惩罚
+                # 这会极大地鼓励无人机尽全力保持 0 加速度（纯直线匀速航行）
+                details['change_power_pen'] += accel * (change_power_multiplier * 0.05)
 
-        # 3D 悬空圆柱打卡检测
         details['missed_target'] += self.calculate_target_penalty(path_points)
 
         env_info = {
@@ -325,7 +337,6 @@ class PathEvaluator:
 
     def evaluate_particle(self, raw_waypoints):
         spacing_penalty = self.calculate_spacing_penalty(raw_waypoints)
-        
         num_pts = 100 
         smooth_path = self.generate_bspline_path(raw_waypoints, num_points=num_pts)
         
