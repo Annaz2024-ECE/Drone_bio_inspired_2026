@@ -46,20 +46,20 @@ class CoordinatorAgent:
             self.last_score = total_score 
 
         is_perfectly_safe = (details.get('fatal_collision', 0) == 0 and 
-                             details.get('missed_target', 0) == 0 and
-                             details.get('sharp_turn', 0) == 0 and
-                             details.get('altitude_violation', 0) == 0)
+                     details.get('missed_target_base', 0) == 0 and  
+                     details.get('sharp_turn', 0) == 0 and
+                     details.get('altitude_violation', 0) == 0)
         
         if is_perfectly_safe and (self.meta_iteration > 1) and (improvement_rate < 0.005):
             print(f"   [全局通知] 3D 航线已绝对安全，且收敛至极限(进步率 < 0.5%)，申请提前结束")
             is_finished = True
-            return self.algo_params, self.eval_params, specific_params, is_finished
+            return self.algo_params, self.eval_params, specific_params, is_finished, []
 
         is_failing = (details.get('fatal_collision', 0) > 0 or 
-                      details.get('missed_target', 0) > 0 or
-                      details.get('altitude_violation', 0) > 0 or
-                      details.get('boundary_violation', 0) > 0)
-                      
+                    details.get('missed_target_base', 0) > 0 or 
+                    details.get('altitude_violation', 0) > 0 or
+                    details.get('boundary_violation', 0) > 0)
+                            
         if is_failing and improvement < 1000:
             self.stuck_counter += 1
             print(f"  [警告] 算法在 3D 空间陷入瓶颈！累计卡壳: {self.stuck_counter} 次")
@@ -86,7 +86,7 @@ class CoordinatorAgent:
             specific_params['press_down'] = True
             actions_taken.append("MACRO (物理): 航线安全但能耗高，下达全局 [贴地压低] 指令！")
 
-        if details.get('missed_target', 0) > 0:
+        if details.get('missed_target_base', 0) > 0:
             specific_params['radar_guidance'] = True 
             actions_taken.append("MACRO (物理): 偏离打卡点！激活全系统 [雷达空投靶向] 机制！")
 

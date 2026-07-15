@@ -22,7 +22,7 @@ class PathEvaluator:
             'pitch_violation': 20000.0,
             'loop_violation': 15000.0,
             # 机动变化功率 (Change Power) 的超标惩罚乘数
-            'change_power_penalty': 8000.0 
+            'change_power_penalty': 80.0 
         }
 
         self.params = {

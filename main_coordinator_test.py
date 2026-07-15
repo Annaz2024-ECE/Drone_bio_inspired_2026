@@ -140,7 +140,10 @@ def run_parameter_tuning_loop():
                               getattr(planner, 'num_wolves', 
                               getattr(planner, 'num_sparrows', 
                               getattr(planner, 'pop_size', 50))))
+                
                 algo_params['pop_size'] = current_pop
+                #  Agent 的内部记忆，彻底消除 Diff 幻觉！
+                agent.algo_params['pop_size'] = current_pop
             
             # ==========================================
             # 【C】核心修复：强制参数注入！
