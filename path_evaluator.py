@@ -22,7 +22,7 @@ class PathEvaluator:
             'pitch_violation': 20000.0,
             'loop_violation': 15000.0,
             # 机动变化功率的惩罚系数 (已大幅下调，配合新版逻辑)
-            'change_power_penalty': 20.0,
+            'change_power_penalty': 10.0,
             # 新增：时间惩罚权重 (每飞行1秒扣 10 分)
             'time_penalty_factor': 10.0
         }
@@ -229,7 +229,7 @@ class PathEvaluator:
         details['base_energy_cost'] = E_base + E_task + E_cruise
         
         accel_threshold = self.params.get('accel_threshold', 2.0)
-        change_power_multiplier = self.penalties.get('change_power_penalty', 50.0)
+        change_power_multiplier = self.penalties.get('change_power_penalty', 10.0)
         
         margin_layers = self.params.get('margin_layers', [0.5, 0.2])
         layer_penalty = self.penalties.get('margin_violation', 5000.0) / len(margin_layers)

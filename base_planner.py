@@ -167,14 +167,11 @@ class BasePlanner:
         """ [抽象方法] 核心的迭代寻优逻辑，必须由继承的子类自己实现！ """
         raise NotImplementedError("子类必须实现 optimize() 方法！")
 
-    def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None):
-        # 掐表算时间
+   def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None):
+        # 掐表算时间 (队友功能)
         end_time = time.time()
         round_time = end_time - self.start_time
         
-        # ==========================================
-        # 【新增】内部时间格式化小工具
-        # ==========================================
         def get_time_str(seconds):
             h, rem = divmod(int(seconds), 3600)
             m, s = divmod(rem, 60)
@@ -195,13 +192,69 @@ class BasePlanner:
             
         print("-" * 65)
 
-        # ... (画图代码与之前保持一致) ...
-        fig = plt.figure(figsize=(16, 8))
-        ax1 = fig.add_subplot(121, projection='3d')
-        ax2 = fig.add_subplot(122)
+        # 预先生成平滑路线，供两张图共用
+        smooth_path = self.evaluator.generate_bspline_path(best_path, num_points=100)
+
+        # ==========================================
+        # 🔥 第一幕：生成独立的【速度剖面图】(先展示)
+        # ==========================================
+        fig_speed = plt.figure(figsize=(10, 5))
+        ax_speed = fig_speed.add_subplot(111)
+        
+        path_distances = [0.0]
+        cumulative_dist = 0.0
+        speeds = []
+        
+        for i in range(len(smooth_path)):
+            if i > 0:
+                dist = np.linalg.norm(smooth_path[i] - smooth_path[i-1])
+                cumulative_dist += dist
+                path_distances.append(cumulative_dist)
+                
+            if hasattr(self.evaluator, '_get_local_speed'):
+                v = self.evaluator._get_local_speed(smooth_path[i])
+            else:
+                v = self.evaluator.params.get('v_cruise', 13.17)
+            speeds.append(v)
+            
+        ax_speed.plot(path_distances, speeds, color='#1976d2', linewidth=3, linestyle='-')
+        ax_speed.fill_between(path_distances, speeds, color='#bbdefb', alpha=0.4)
+        
+        v_cruise = self.evaluator.params.get('v_cruise', 13.17)
+        v_insp = self.evaluator.params.get('v_inspection', 5.0)
+        ax_speed.axhline(y=v_cruise, color='gray', linestyle='--', alpha=0.7, label=f'Cruise ({v_cruise} m/s)')
+        ax_speed.axhline(y=v_insp, color='#d32f2f', linestyle='--', alpha=0.7, label=f'Inspection ({v_insp} m/s)')
+        
+        title_speed = f'{algo_name} Dynamic Speed Profile'
+        if run_idx is not None: title_speed += f' (Run {run_idx})'
+        ax_speed.set_title(title_speed, fontsize=14, fontweight='bold')
+        ax_speed.set_xlabel('Distance along path (m)', fontsize=12)
+        ax_speed.set_ylabel('Target Speed (m/s)', fontsize=12)
+        ax_speed.set_ylim(0, max(max(speeds), v_cruise) * 1.3)
+        ax_speed.legend(loc='lower right')
+        ax_speed.grid(True, linestyle=':', alpha=0.6)
+        
+        plt.tight_layout()
+        
+        if save_dir is not None:
+            # 批量运行模式：安静地保存为独立文件，不弹窗打扰
+            os.makedirs(save_dir, exist_ok=True)
+            filename_speed = f"{algo_name}_run_{run_idx:02d}_speed.png" if run_idx is not None else f"{algo_name}_speed.png"
+            fig_speed.savefig(os.path.join(save_dir, filename_speed), dpi=300)
+            plt.close(fig_speed)
+        else:
+            # 单次测试模式：先弹出速度图，阻塞程序，等待用户关闭
+            print("\n  [展示提示] 正在弹出【速度剖面图】... (请关闭图片窗口以继续展示 3D 路线)")
+            plt.show() # 这里会阻塞，直到你关掉这个窗口
+
+        # ==========================================
+        # 🔥 第二幕：生成独立的【3D航线与收敛分析图】(后展示)
+        # ==========================================
+        fig_main = plt.figure(figsize=(16, 8))
+        ax1 = fig_main.add_subplot(121, projection='3d')
+        ax2 = fig_main.add_subplot(122)
         
         self.env.draw_environment_3d(ax=ax1)
-        smooth_path = self.evaluator.generate_bspline_path(best_path, num_points=100)
         
         ax1.plot(smooth_path[:, 0], smooth_path[:, 1], smooth_path[:, 2], 
                  color='#e65100', linewidth=3, label=f'{algo_name} Smooth Path', zorder=6)
@@ -212,41 +265,26 @@ class BasePlanner:
         ax1.legend(loc='upper left', fontsize=10)
         ax2.plot(score_history, color='#2e7d32', linewidth=2)
         
-        title = f'{algo_name} Convergence Curve'
-        if run_idx is not None: title += f' (Run {run_idx})'
-        ax2.set_title(title, fontsize=14, fontweight='bold')
+        title_main = f'{algo_name} Convergence & Intervention'
+        if run_idx is not None: title_main += f' (Run {run_idx})'
+        ax2.set_title(title_main, fontsize=14, fontweight='bold')
         ax2.set_xlabel('Iteration', fontsize=12)
         ax2.set_ylabel('Fitness Score (Log Scale)', fontsize=12)
         ax2.set_yscale('log') 
         ax2.grid(True, linestyle=':', alpha=0.6)
 
-        # ==========================================
-        # 🔥 【新增】：在曲线上方渲染“特工干预事件”
-        # ==========================================
+        # 【队友功能保留】：渲染“特工干预事件”
         if event_history:
-            # 预设几种醒目的警示色，循环使用
             event_colors = ['#d32f2f', '#1976d2', '#f57c00', '#388e3c', '#8e24aa']
-            
             for i, (iter_idx, action_tag) in enumerate(event_history):
-                # 如果干预点超出了当前历史长度，则忽略
-                if iter_idx >= len(score_history):
-                    continue
-                    
+                if iter_idx >= len(score_history): continue
                 color = event_colors[i % len(event_colors)]
-                
-                # 1. 画一条贯穿上下的虚线，精确标定干预发生的迭代节点
                 ax2.axvline(x=iter_idx, color=color, linestyle='--', alpha=0.7, linewidth=1.5)
-                
-                # 2. 在虚线旁边写上干预内容 (使用 get_xaxis_transform 让 Y 轴坐标变为 0~1 的相对比例，完美适配 Log 对数坐标轴)
-                # 使用取余算法错开文本高度，防止多个事件标签重叠在一起 (从底部的 10% 到 60% 交替)
-                # 2. 在虚线旁边写上精确的参数切变
                 y_offset = 0.10 + (i % 5) * 0.15 
                 ax2.text(iter_idx, y_offset, f" {action_tag}", 
                          transform=ax2.get_xaxis_transform(),
                          rotation=0, color=color, 
-                         fontsize=8,           # 【调整】字体稍微调小一点以容纳多行
-                         linespacing=1.2,      # 【新增】增加多行文本的行间距
-                         fontweight='bold', 
+                         fontsize=8, linespacing=1.2, fontweight='bold', 
                          va='bottom', ha='left',
                          bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.85, edgecolor=color))
         
@@ -258,7 +296,6 @@ class BasePlanner:
                 val_str = f"{v:.2f}" if isinstance(v, float) else str(v)
                 params_list.append(f"  {k}: {val_str}")
             
-        # 【新增】把总耗时强行塞进图片左侧的参数面板里！
         params_list.append("-" * 15)
         params_list.append(f"  {time_display}")
         
@@ -267,7 +304,7 @@ class BasePlanner:
                  verticalalignment='top', horizontalalignment='left',
                  bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
         
-        _, details, _ = self.evaluator.evaluate_particle(best_path)
+        _, details, _ = self.evaluator.evaluate_pso_particle(best_path)
         details_list = []
         for k, v in details.items():
             if v > 0: details_list.append(f"  {k}: {v:,.0f}")
@@ -283,12 +320,13 @@ class BasePlanner:
                  transform=ax2.transAxes, fontsize=12, fontweight='bold', 
                  color='white', horizontalalignment='right', verticalalignment='top',
                  bbox=dict(boxstyle='round,pad=0.5', facecolor='#d32f2f', alpha=0.9, edgecolor='none'))
-        
+                 
         plt.tight_layout()
+        
         if save_dir is not None:
-            os.makedirs(save_dir, exist_ok=True)
-            filename = f"{algo_name}_run_{run_idx:02d}.png" if run_idx else f"{algo_name}_result.png"
-            plt.savefig(os.path.join(save_dir, filename), dpi=300)
-            plt.close(fig)
+            filename_main = f"{algo_name}_run_{run_idx:02d}_main.png" if run_idx is not None else f"{algo_name}_main.png"
+            fig_main.savefig(os.path.join(save_dir, filename_main), dpi=300)
+            plt.close(fig_main)
         else:
+            print("\n  [展示提示] 正在弹出【3D综合面板】...")
             plt.show()
