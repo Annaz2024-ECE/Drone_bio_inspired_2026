@@ -56,73 +56,86 @@ class CoordinatorAgent:
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished, []
 
-        is_failing = (details.get('fatal_collision', 0) > 0 or 
-                    details.get('missed_target_base', 0) > 0 or 
-                    details.get('altitude_violation', 0) > 0 or
-                    details.get('boundary_violation', 0) > 0)
-                            
+        # ==========================================
+        # 核心重构：阶级森严的分层诊断系统 (Hierarchical Diagnostics)
+        # ==========================================
+        tier1_issues = (details.get('fatal_collision', 0) > 0 or details.get('missed_target', 0) > 0)
+        tier2_issues = (details.get('altitude_violation', 0) > 0 or details.get('boundary_violation', 0) > 0)
+        is_failing = tier1_issues or tier2_issues
+        needs_smooth = False # 默认不进行平滑，除非通过了生死考验
+        
         if is_failing and improvement < 1000:
             self.stuck_counter += 1
             print(f"  [警告] 算法在 3D 空间陷入瓶颈！累计卡壳: {self.stuck_counter} 次")
         else:
             self.stuck_counter = 0
 
-        # ==========================================
-        # 宏观调控一：通用物理避障与空间引导 (Physics Directives)
-        # 适用于所有继承了 BasePlanner 的算法
-        # ==========================================
-        if details.get('fatal_collision', 0) > 0:
-            specific_params['lift_up'] = True
-            self.eval_params['max_turn_angle'] = 150.0 
-            actions_taken.append("MACRO (物理): 遭遇撞击！下达全局 [紧急拉升] 指令，放宽转弯限制！")
-        else:
-            self.eval_params['max_turn_angle'] = 120.0 # 危机解除，回归120度，进一步优化
+        # ------------------------------------------
+        # 第一梯队 (生死存亡)：撞墙、漏打卡
+        # ------------------------------------------
+        if tier1_issues:
+            print("  [状态] 当前处于 T1 危机状态：优先保命与打卡，暂停一切能耗与平滑优化！")
+            self.eval_params['max_turn_angle'] = 150.0 # 放开转弯限制，允许急转弯逃生
+            
+            if details.get('fatal_collision', 0) > 0:
+                specific_params['lift_up'] = True
+                actions_taken.append("MACRO [T1 绝对底线]: 遭遇撞击！下达 [紧急拉升] 指令！")
+                
+            if details.get('missed_target', 0) > 0:
+                specific_params['radar_guidance'] = True 
+                actions_taken.append("MACRO [T1 绝对底线]: 偏离打卡点！激活全系统 [雷达空投靶向] 机制！")
 
-        if details.get('margin_violation', 0) > 0 and details.get('fatal_collision', 0) == 0:
-            specific_params['apply_repulsion'] = True
-            actions_taken.append("MACRO (物理): 航线极度擦墙！启动 [侧向斥力算子]，强行推离危险边缘！")
-
-        is_safe_but_high = is_perfectly_safe and (details.get('gravity_cost', 0) > 1500)
-        if is_safe_but_high:
-            specific_params['press_down'] = True
-            actions_taken.append("MACRO (物理): 航线安全但能耗高，下达全局 [贴地压低] 指令！")
-
-        if details.get('missed_target_base', 0) > 0:
-            specific_params['radar_guidance'] = True 
-            actions_taken.append("MACRO (物理): 偏离打卡点！激活全系统 [雷达空投靶向] 机制！")
-
-        # 既然拉普拉斯平滑也是基类的绝招，把它也归入宏观物理调控！
-        needs_smooth = (details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000 or details.get('loop_penalty', 0) > 0)
-        if needs_smooth:
-            specific_params['apply_laplacian'] = True
-            actions_taken.append("MACRO (物理): 路线不平滑或绕圈！下达 [拉普拉斯平滑算子] 橡皮筋拉直指令！")
-
-        # ==========================================
-        # 宏观调控二：宏观算力/预算调配 (Budget Allocation)
-        # ==========================================
-        if is_failing:
+            # T1 危机直接爆兵力
             if self.algo_params['pop_size'] < 200:
                 self.algo_params['pop_size'] += 20
-                actions_taken.append("MACRO (算力): INCREASE_POP_SIZE (大本营增派搜索兵力)")
-            if details.get('fatal_collision', 0) > 0 and self.algo_params['max_iter'] < 500:
+                actions_taken.append("MACRO [算力]: 触发 T1 危机，大本营增派搜索兵力！")
+            if self.algo_params['max_iter'] < 500:
                 self.algo_params['max_iter'] += 50
-                actions_taken.append("MACRO (算力): INCREASE_MAX_ITER (延长规避计算工期)")
-
-        # ==========================================
-        # 宏观调控三：能耗与时间的“自动换挡”博弈 (Auto-Gearbox)
-        # ==========================================
-        change_power = details.get('change_power_pen', 0)
-        current_v = self.eval_params['v_cruise']
-        
-        # 降挡逻辑：如果机动耗电爆炸，且速度还有下降空间（底线保底为 8.0m/s 防止不动）
-        if change_power > 50000 and current_v > 8.0:
-            self.eval_params['v_cruise'] = max(8.0, current_v - 1.5) # 每次踩 1.5 的刹车
-            actions_taken.append(f"MACRO (能耗): 机动耗电爆炸！全局降速至 {self.eval_params['v_cruise']:.2f} m/s 缓解转弯压力！")
+                
+        # ------------------------------------------
+        # 第二梯队 (规则红线)：越界、超高
+        # ------------------------------------------
+        elif tier2_issues:
+            print("  [状态] 当前处于 T2 违规状态：优先纠正空域越界，暂停能耗与平滑优化！")
+            self.eval_params['max_turn_angle'] = 120.0
             
-        # 升挡逻辑：如果机动耗电很小（证明路线已平滑），为了降低时间惩罚，踩油门恢复速度！
-        elif change_power < 15000 and current_v < 13.17:
-            self.eval_params['v_cruise'] = min(13.17, current_v + 1.0) # 每次踩 1.0 的油门
-            actions_taken.append(f"MACRO (能耗): 路线已平滑，加速至 {self.eval_params['v_cruise']:.2f} m/s 减少飞行时间惩罚！")
+            if self.algo_params['pop_size'] < 150:
+                self.algo_params['pop_size'] += 10
+                actions_taken.append("MACRO [T2 违规线]: 发生越界违规！微调兵力强制收敛到合法空间！")
+
+        # ------------------------------------------
+        # 第三梯队 (锦上添花)：平滑、能耗、时间
+        # 只有在活着（无碰撞）且做完任务（全打卡）的前提下，才配谈优化！
+        # ------------------------------------------
+        else:
+            self.eval_params['max_turn_angle'] = 120.0
+            
+            # 1. 路线平滑优化 (Smoothness)
+            needs_smooth = (details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000 or details.get('loop_penalty', 0) > 0)
+            if needs_smooth:
+                specific_params['apply_laplacian'] = True
+                actions_taken.append("MACRO [T3 优化-平滑]: 路线曲折！下达 [拉普拉斯平滑] 橡皮筋拉直指令！")
+
+            # 2. 安全裕度优化 (Margin)
+            if details.get('margin_violation', 0) > 0:
+                specific_params['apply_repulsion'] = True
+                actions_taken.append("MACRO [T3 优化-安全]: 航线擦墙，启动 [侧向斥力算子] 推离危险边缘！")
+
+            # 3. 贴地与重力能耗优化 (Gravity)
+            if details.get('gravity_cost', 0) > 1500:
+                specific_params['press_down'] = True
+                actions_taken.append("MACRO [T3 优化-重力]: 路线已安全，下达 [贴地压低] 指令以节省重力势能！")
+
+            # 4. 自动变速箱 (Speed/Time) 优化
+            change_power = details.get('change_power_pen', 0)
+            current_v = self.eval_params['v_cruise']
+            
+            if change_power > 50000 and current_v > 8.0:
+                self.eval_params['v_cruise'] = max(8.0, current_v - 1.5)
+                actions_taken.append(f"MACRO [T3 优化-机动]: 机动耗电过高！降速至 {self.eval_params['v_cruise']:.2f} m/s 缓解急弯！")
+            elif change_power < 15000 and current_v < 13.17:
+                self.eval_params['v_cruise'] = min(13.17, current_v + 1.0)
+                actions_taken.append(f"MACRO [T3 优化-时间]: 路线已丝滑，提速至 {self.eval_params['v_cruise']:.2f} m/s 缩短飞行时间！")
 
         # ==========================================
         # 微观调控：动态加载算法专属的内部参数特工 (Algorithm Internal Tuning)
@@ -144,7 +157,7 @@ class CoordinatorAgent:
             actions_taken.append("MAINTAIN (当前状态极佳，全军保持原方推进)")
 
         # ==========================================
-        # 🔥 【新增】：精准的状态比对引擎 (State Diff)
+        # 【新增】：精准的状态比对引擎 (State Diff)
         # ==========================================
         param_changes = []
         
