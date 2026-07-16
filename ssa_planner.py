@@ -123,7 +123,7 @@ class SSAPlanner(BasePlanner):
         
         for i in range(self.num_sparrows):
             full_path = self._decode_path(self.sparrows[i])
-            self.fitness[i], _, _ = self.evaluator.evaluate_pso_particle(full_path)
+            self.fitness[i], _, _ = self.evaluator.evaluate_particle(full_path)
             if self.fitness[i] < self.historical_best_score:
                 self.historical_best_score = self.fitness[i]
                 self.historical_best_pos = np.copy(self.sparrows[i])
@@ -198,7 +198,7 @@ class SSAPlanner(BasePlanner):
             for i in range(self.num_sparrows):
                 new_sparrows[i] = np.clip(new_sparrows[i], self.lb, self.ub)
                 full_path = self._decode_path(new_sparrows[i])
-                score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                score, _, _ = self.evaluator.evaluate_particle(full_path)
                 
                 # 【核心修复3：贪婪选择 (Greedy Selection)】
                 if score <= self.fitness[i]:
@@ -250,7 +250,7 @@ class SSAPlanner(BasePlanner):
                             
                             # 【核心斩断贪婪陷阱】：无视分数变差，强行更新肉体记忆
                             full_path = self._decode_path(self.sparrows[i])
-                            self.fitness[i], _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                            self.fitness[i], _, _ = self.evaluator.evaluate_particle(full_path)
                 
                 # 2. 物理推力逻辑 (Z轴强制位移)
                 else:
@@ -269,7 +269,7 @@ class SSAPlanner(BasePlanner):
                             
                             # 【核心斩断贪婪陷阱】：无视分数变差，强行更新肉体记忆
                             full_path = self._decode_path(self.sparrows[i])
-                            self.fitness[i], _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                            self.fitness[i], _, _ = self.evaluator.evaluate_particle(full_path)
 
                 # 3. 动作结束后，二次检查是否诞生了新的历史最优
                 for i in range(self.num_sparrows):
@@ -296,14 +296,14 @@ class SSAPlanner(BasePlanner):
         return self._decode_path(self.historical_best_pos), self.convergence_curve
         
 if __name__ == "__main__":
-    planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=100, max_iter=150, num_waypoints=65)
+    planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=100, max_iter=150, num_waypoints=45)
     best_path, history = planner.optimize()
     #planner.evaluator.debug_target_coverage(best_path)
 
     # ==========================================
     # 🔥 【新增】：把 SSA 跑出来的 3D 路线存到本地
     # ==========================================
-    np.save('saved_best_path.npy', best_path)
-    print("✅ 3D路线坐标已安全存档至 'saved_best_path.npy'！")
+   # np.save('saved_best_path.npy', best_path)
+   # print("3D路线坐标已安全存档至 'saved_best_path.npy'！")
     
     planner.plot_result(best_path, history, algo_name="SSA-3D")

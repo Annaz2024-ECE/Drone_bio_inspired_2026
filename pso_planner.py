@@ -105,11 +105,11 @@ class PSOPlanner(BasePlanner):
         for i in range(self.num_particles):
             # 如果不是第一轮，老中医可能修改了规则，过去的 pbest_score 已作废，必须按新规则重算！
             if self.pbest_scores[i] != np.inf:
-                true_pbest_score, _, _ = self.evaluator.evaluate_pso_particle(self._decode_path(self.pbest_pos[i]))
+                true_pbest_score, _, _ = self.evaluator.evaluate_particle(self._decode_path(self.pbest_pos[i]))
                 self.pbest_scores[i] = true_pbest_score
                 
             full_path = self._decode_path(self.particles[i])
-            score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
+            score, _, _ = self.evaluator.evaluate_particle(full_path)
             
             if score < self.pbest_scores[i]:
                 self.pbest_scores[i] = score
@@ -160,7 +160,7 @@ class PSOPlanner(BasePlanner):
             # ==========================================
             for i in range(self.num_particles):
                 full_path = self._decode_path(self.particles[i])
-                score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                score, _, _ = self.evaluator.evaluate_particle(full_path)
                 
                 if score < self.pbest_scores[i]:
                     self.pbest_scores[i] = score
@@ -212,7 +212,7 @@ class PSOPlanner(BasePlanner):
                             # 【核心斩断橡皮筋】：清零速度并强制洗脑 pbest
                             self.velocities[i] = 0.0 
                             full_path = self._decode_path(self.particles[i])
-                            score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                            score, _, _ = self.evaluator.evaluate_particle(full_path)
                             self.pbest_scores[i] = score
                             self.pbest_pos[i] = np.copy(self.particles[i])
                 
@@ -234,7 +234,7 @@ class PSOPlanner(BasePlanner):
                             # 【核心斩断橡皮筋】：清零速度并强制洗脑 pbest
                             self.velocities[i] = 0.0 
                             full_path = self._decode_path(self.particles[i])
-                            score, _, _ = self.evaluator.evaluate_pso_particle(full_path)
+                            score, _, _ = self.evaluator.evaluate_particle(full_path)
                             self.pbest_scores[i] = score
                             self.pbest_pos[i] = np.copy(self.particles[i])
 
@@ -264,16 +264,16 @@ class PSOPlanner(BasePlanner):
 
 # ===================== 修改后的主函数（10次循环保存） =====================
 if __name__ == "__main__":
-    save_dir = "PSO_3D_simulation_try"
+    save_dir = "PSO_new_path_evaluator"
     os.makedirs(save_dir, exist_ok=True)
     
-    num_runs = 1
+    num_runs = 5
     all_final_scores = []
     
     for run_idx in range(num_runs):
         print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
         # 注意这里的 num_waypoints 被强制设定成了 30 以上来适应复杂的 3D 拐角
-        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=70)
+        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=45)
         best_path, history = planner.optimize()
         
         #planner.evaluator.debug_target_coverage(best_path)
