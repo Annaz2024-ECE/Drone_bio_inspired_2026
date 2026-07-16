@@ -167,7 +167,7 @@ class BasePlanner:
         """ [抽象方法] 核心的迭代寻优逻辑，必须由继承的子类自己实现！ """
         raise NotImplementedError("子类必须实现 optimize() 方法！")
 
-   def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None):
+    def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None):
         # 掐表算时间 (队友功能)
         end_time = time.time()
         round_time = end_time - self.start_time
