@@ -304,7 +304,7 @@ class BasePlanner:
                  verticalalignment='top', horizontalalignment='left',
                  bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
         
-        _, details, _ = self.evaluator.evaluate_pso_particle(best_path)
+        _, details, _ = self.evaluator.evaluate_particle(best_path)
         details_list = []
         for k, v in details.items():
             if v > 0: details_list.append(f"  {k}: {v:,.0f}")
