@@ -264,16 +264,16 @@ class PSOPlanner(BasePlanner):
 
 # ===================== 修改后的主函数（10次循环保存） =====================
 if __name__ == "__main__":
-    save_dir = "PSO_3D_Haining"
+    save_dir = "PSO_3D_simulation_try"
     os.makedirs(save_dir, exist_ok=True)
     
-    num_runs = 10
+    num_runs = 1
     all_final_scores = []
     
     for run_idx in range(num_runs):
         print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
         # 注意这里的 num_waypoints 被强制设定成了 30 以上来适应复杂的 3D 拐角
-        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=40)
+        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=70)
         best_path, history = planner.optimize()
         
         #planner.evaluator.debug_target_coverage(best_path)
@@ -284,13 +284,13 @@ if __name__ == "__main__":
         with open(os.path.join(save_dir, f"run_{run_idx:02d}_score.txt"), 'w') as f:
             f.write(f"Final score: {final_score:.2f}\n")
             
-    print("\n" + "="*50)
-    print("所有运行完成！结果保存在", save_dir)
-    print("各次最终得分:")
-    for i, score in enumerate(all_final_scores):
-        print(f"  Run {i+1:02d}: {score:,.2f}")
-    if all_final_scores:
-        avg = np.mean(all_final_scores)
-        std = np.std(all_final_scores)
-        print(f"\n平均得分: {avg:,.2f}  (±{std:,.2f})")
-    print("="*50)
+    # print("\n" + "="*50)
+    # print("所有运行完成！结果保存在", save_dir)
+    # print("各次最终得分:")
+    # for i, score in enumerate(all_final_scores):
+    #     print(f"  Run {i+1:02d}: {score:,.2f}")
+    # if all_final_scores:
+    #     avg = np.mean(all_final_scores)
+    #     std = np.std(all_final_scores)
+    #     print(f"\n平均得分: {avg:,.2f}  (±{std:,.2f})")
+    # print("="*50)

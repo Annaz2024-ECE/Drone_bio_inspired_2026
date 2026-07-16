@@ -296,7 +296,14 @@ class SSAPlanner(BasePlanner):
         return self._decode_path(self.historical_best_pos), self.convergence_curve
         
 if __name__ == "__main__":
-    planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=80, max_iter=200, num_waypoints=30)
+    planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=100, max_iter=150, num_waypoints=65)
     best_path, history = planner.optimize()
-    planner.evaluator.debug_target_coverage(best_path)
+    #planner.evaluator.debug_target_coverage(best_path)
+
+    # ==========================================
+    # 🔥 【新增】：把 SSA 跑出来的 3D 路线存到本地
+    # ==========================================
+    np.save('saved_best_path.npy', best_path)
+    print("✅ 3D路线坐标已安全存档至 'saved_best_path.npy'！")
+    
     planner.plot_result(best_path, history, algo_name="SSA-3D")

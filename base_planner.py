@@ -204,9 +204,9 @@ class BasePlanner:
         smooth_path = self.evaluator.generate_bspline_path(best_path, num_points=100)
         
         ax1.plot(smooth_path[:, 0], smooth_path[:, 1], smooth_path[:, 2], 
-                 color='#e65100', linewidth=3, label=f'{algo_name} Smooth Path', zorder=6)
+                 color='#00BFFF', linewidth=3, label=f'{algo_name} Smooth Path', zorder=6)
         ax1.plot(best_path[:, 0], best_path[:, 1], best_path[:, 2], 
-                 color='gray', linewidth=1, linestyle='--',
+                 color='#FFD700', linewidth=1, linestyle='--',
                  marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)
                  
         ax1.legend(loc='upper left', fontsize=10)

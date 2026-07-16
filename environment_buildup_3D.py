@@ -68,6 +68,10 @@ class UAVEnvironment3D:
                 # 绕左下角进行旋转
                 rotated_rect = affinity.rotate(rect, angle, origin=(bl[0], bl[1]), use_radians=False)
                 shapely_obs['poly_2d'] = rotated_rect
+            
+            elif obs['type'] == 'polygon':
+                # 多边形最简单，直接把点阵传给 Shapely 即可
+                shapely_obs['poly_2d'] = Polygon(obs['points'])
                 
             self.shapely_obstacles.append(shapely_obs)
 
@@ -93,15 +97,15 @@ class UAVEnvironment3D:
             
             # ---- 物理公式：覆盖半径 R 所需的最佳悬停高度 ----
             # 几何关系：R = H * tan(FOV/2)  =>  H = R / tan(FOV/2)
-            optimal_height = radius / math.tan(half_fov_rad)
+            optimal_height = radius / math.tan(half_fov_rad) - 0.5
             
             # 设置绝对安全最低高度，防止飞得太低撞到地面凸起物（如路灯、行人）
-            optimal_height = max(optimal_height, 3.0) 
+            optimal_height = max(optimal_height, 1.5) 
             target['z_min'] = optimal_height
             
             # 2. z_max：设置为最佳高度 + 8米（或 1.5倍），飞高永远能覆盖更大范围，
             #    且高空障碍物极少，给算法极大的自由度去“命中”目标。
-            target['z_max'] = optimal_height + 4
+            target['z_max'] = optimal_height + 3
             
             # (可选) 为了方便你调试，可以把计算出的值打出来看看
             # print(f"目标 {target['name']}: 半径={radius}m, 最佳高度={optimal_height:.1f}m, 设定范围=[{target['z_min']:.1f}, {target['z_max']:.1f}]")
@@ -196,30 +200,33 @@ class UAVEnvironment3D:
         for obs in self.obstacles:
             z_min = obs['z_min']
             z_max = obs['z_max']
+            # 获取颜色，如果没有定义则使用默认的蓝灰色
+            color = obs.get('color', '#5c6bc0')
             
             if obs['type'] == 'circle':
+                # ==========================================
+                # 🔥 视觉修复：将圆柱体转化为 30 边形进行硬朗风格渲染！
+                # ==========================================
                 center = obs['center']
                 r = obs['radius']
                 
-                # 1. 产生圆柱侧面的网格
-                z_side = np.linspace(z_min, z_max, 2)
-                theta = np.linspace(0, 2*np.pi, 30)
-                theta_grid, z_grid = np.meshgrid(theta, z_side)
-                x_side = center[0] + r * np.cos(theta_grid)
-                y_side = center[1] + r * np.sin(theta_grid)
-                # 绘制侧面
-                ax.plot_surface(x_side, y_side, z_grid, color='#5c6bc0', alpha=0.6, edgecolor='none')
+                # 均匀生成 30 个圆上的顶点
+                theta = np.linspace(0, 2 * np.pi, 30, endpoint=False)
+                pts = np.array([[center[0] + r * math.cos(t), center[1] + r * math.sin(t)] for t in theta])
                 
-                # 2. 产生圆柱上下底面（盖子）的网格
-                r_vals = np.linspace(0, r, 2)
-                r_grid, theta_grid_cap = np.meshgrid(r_vals, theta)
-                x_cap = center[0] + r_grid * np.cos(theta_grid_cap)
-                y_cap = center[1] + r_grid * np.sin(theta_grid_cap)
+                verts_bottom = [[p[0], p[1], z_min] for p in pts]
+                verts_top = [[p[0], p[1], z_max] for p in pts]
                 
-                # 绘制底面 (z = z_min)
-                ax.plot_surface(x_cap, y_cap, np.full(x_cap.shape, z_min), color='#5c6bc0', alpha=0.6, edgecolor='none')
-                # 绘制顶面 (z = z_max)
-                ax.plot_surface(x_cap, y_cap, np.full(x_cap.shape, z_max), color='#5c6bc0', alpha=0.6, edgecolor='none')
+                # 构建所有的面：上下底面 + 30个侧面墙壁
+                faces = [verts_bottom, verts_top] 
+                num_pts = len(pts)
+                for i in range(num_pts):
+                    next_i = (i + 1) % num_pts
+                    side_face = [verts_bottom[i], verts_bottom[next_i], verts_top[next_i], verts_top[i]]
+                    faces.append(side_face)
+                    
+                # 使用和 Polygon 完全一样的硬面材质，带有黑边，不再虚幻！
+                ax.add_collection3d(Poly3DCollection(faces, facecolors=color, linewidths=0.5, edgecolors='black', alpha=0.85))
 
                 
             elif obs['type'] == 'rect':
@@ -249,7 +256,31 @@ class UAVEnvironment3D:
                     [verts[2], verts[3], verts[7], verts[6]], # 侧面3
                     [verts[3], verts[0], verts[4], verts[7]]  # 侧面4
                 ]
-                ax.add_collection3d(Poly3DCollection(faces, facecolors='#5c6bc0', linewidths=0.5, edgecolors='black', alpha=0.6))
+                ax.add_collection3d(Poly3DCollection(faces, facecolors=color, linewidths=0.5, edgecolors='black', alpha=0.6))
+            
+            elif obs['type'] == 'polygon':
+                # ==========================================
+                # 【新增】通用多边形 3D 拉伸渲染逻辑
+                # 无论是半圆形、L型还是五角星，只要是 Polygon 都能完美生成 3D 建筑！
+                # ==========================================
+                pts = np.array(obs['points'])
+                
+                # 构建底面和顶面的顶点
+                verts_bottom = [[p[0], p[1], z_min] for p in pts]
+                verts_top = [[p[0], p[1], z_max] for p in pts]
+                
+                faces = [verts_bottom, verts_top] # 先把上下两个盖子放进面集合里
+                
+                # 遍历多边形的每条边，向上拉伸生成侧面
+                num_pts = len(pts)
+                for i in range(num_pts):
+                    next_i = (i + 1) % num_pts
+                    # 侧面的四个点顺序：底1 -> 底2 -> 顶2 -> 顶1
+                    side_face = [verts_bottom[i], verts_bottom[next_i], verts_top[next_i], verts_top[i]]
+                    faces.append(side_face)
+                    
+                # 将所有面打包渲染，并涂上专属颜色
+                ax.add_collection3d(Poly3DCollection(faces, facecolors=color, linewidths=0.5, edgecolors='black', alpha=0.85))
             
         # 绘制巡检目标区域圆柱体（线框模式）
         for target in self.target_areas:
@@ -296,7 +327,7 @@ class UAVEnvironment3D:
 # ==========================================
 if __name__ == "__main__":
     # 注意：确保文件路径与你的 json5 对应
-    env = UAVEnvironment3D('maps/zijingang.json5')
+    env = UAVEnvironment3D('maps/zijingang_2.json5')
     
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
@@ -324,15 +355,15 @@ if __name__ == "__main__":
     print("-" * 40)
     
     # 在 3D 图上画出这两条测试航线
-    ax.plot([p_safe_1[0], p_safe_2[0], p_safe_3[0]], 
-            [p_safe_1[1], p_safe_2[1], p_safe_3[1]], 
-            [p_safe_1[2], p_safe_2[2], p_safe_3[2]], 
-            color='#4caf50', linestyle='-', linewidth=2.5, label='Safe Test Path (Alt: 30)')
+    # ax.plot([p_safe_1[0], p_safe_2[0], p_safe_3[0]], 
+    #         [p_safe_1[1], p_safe_2[1], p_safe_3[1]], 
+    #         [p_safe_1[2], p_safe_2[2], p_safe_3[2]], 
+    #         color='#4caf50', linestyle='-', linewidth=2.5, label='Safe Test Path (Alt: 30)')
             
-    ax.plot([p_collide_1[0], p_collide_2[0], p_collide_3[0]], 
-            [p_collide_1[1], p_collide_2[1], p_collide_3[1]], 
-            [p_collide_1[2], p_collide_2[2], p_collide_3[2]], 
-            color='#f44336', linestyle='--', linewidth=2.5, label='Collision Path (Alt: 5)')
+    # ax.plot([p_collide_1[0], p_collide_2[0], p_collide_3[0]], 
+    #         [p_collide_1[1], p_collide_2[1], p_collide_3[1]], 
+    #         [p_collide_1[2], p_collide_2[2], p_collide_3[2]], 
+    #         color='#f44336', linestyle='--', linewidth=2.5, label='Collision Path (Alt: 5)')
             
     ax.legend(loc='upper right')
     plt.tight_layout()
