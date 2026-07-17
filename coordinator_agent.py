@@ -57,74 +57,60 @@ class CoordinatorAgent:
             return self.algo_params, self.eval_params, specific_params, is_finished, []
 
         # ==========================================
-        # 核心重构：阶级森严的分层诊断系统 (Hierarchical Diagnostics)
+        # 听从建议，化繁为简的“两极管”诊断系统
         # ==========================================
-        tier1_issues = (details.get('fatal_collision', 0) > 0 or details.get('missed_target', 0) > 0)
-        tier2_issues = (details.get('altitude_violation', 0) > 0 or details.get('boundary_violation', 0) > 0)
-        is_failing = tier1_issues or tier2_issues
-        needs_smooth = False # 默认不进行平滑，除非通过了生死考验
+        # 只要没有撞墙，也没有漏打卡，那就是“存活状态”
+        is_failing = (details.get('fatal_collision', 0) > 0 or details.get('missed_target', 0) > 0)
+        needs_smooth = False 
         
         if is_failing and improvement < 1000:
             self.stuck_counter += 1
-            print(f"  [警告] 算法在 3D 空间陷入瓶颈！累计卡壳: {self.stuck_counter} 次")
+            print(f"  [警告] 算法在 3D 空间陷入生死瓶颈！累计卡壳: {self.stuck_counter} 次")
         else:
             self.stuck_counter = 0
 
         # ------------------------------------------
-        # 第一梯队 (生死存亡)：撞墙、漏打卡
+        # 阶段 1 (生死底线)：撞墙、漏打卡
         # ------------------------------------------
-        if tier1_issues:
-            print("  [状态] 当前处于 T1 危机状态：优先保命与打卡，暂停一切能耗与平滑优化！")
+        if is_failing:
+            print("  [状态] 当前处于危机状态：优先保命与打卡，屏蔽一切高阶优化！")
             self.eval_params['max_turn_angle'] = 150.0 # 放开转弯限制，允许急转弯逃生
             
             if details.get('fatal_collision', 0) > 0:
                 specific_params['lift_up'] = True
-                actions_taken.append("MACRO [T1 绝对底线]: 遭遇撞击！下达 [紧急拉升] 指令！")
+                actions_taken.append("MACRO [绝对底线]: 遭遇撞击！下达 [紧急拉升] 指令！")
                 
             if details.get('missed_target', 0) > 0:
                 specific_params['radar_guidance'] = True 
-                actions_taken.append("MACRO [T1 绝对底线]: 偏离打卡点！激活全系统 [雷达空投靶向] 机制！")
+                actions_taken.append("MACRO [绝对底线]: 偏离打卡点！激活全系统 [雷达空投靶向] 机制！")
 
-            # T1 危机直接爆兵力
-            if self.algo_params['pop_size'] < 200:
-                self.algo_params['pop_size'] += 20
-                actions_taken.append("MACRO [算力]: 触发 T1 危机，大本营增派搜索兵力！")
+            # 只有遇到生死危机，才延长计算时间
             if self.algo_params['max_iter'] < 500:
                 self.algo_params['max_iter'] += 50
                 
         # ------------------------------------------
-        # 第二梯队 (规则红线)：越界、超高
-        # ------------------------------------------
-        elif tier2_issues:
-            print("  [状态] 当前处于 T2 违规状态：优先纠正空域越界，暂停能耗与平滑优化！")
-            self.eval_params['max_turn_angle'] = 120.0
-            
-            if self.algo_params['pop_size'] < 150:
-                self.algo_params['pop_size'] += 10
-                actions_taken.append("MACRO [T2 违规线]: 发生越界违规！微调兵力强制收敛到合法空间！")
-
-        # ------------------------------------------
-        # 第三梯队 (锦上添花)：平滑、能耗、时间
-        # 只有在活着（无碰撞）且做完任务（全打卡）的前提下，才配谈优化！
+        # 阶段 2 (全面精修优化)：合规、平滑、能耗、时间
+        # 只要活着，且做完了任务，剩下的问题全丢进池子里一起解决！
         # ------------------------------------------
         else:
             self.eval_params['max_turn_angle'] = 120.0
+            print("  [状态] 危机解除，进入全面精修优化阶段 (合规、平滑、能耗)...")
             
-            # 1. 路线平滑优化 (Smoothness)
+            # 1. 越界与擦墙优化 (Boundary & Margin)
+            if details.get('boundary_violation', 0) > 0 or details.get('margin_violation', 0) > 0:
+                specific_params['apply_repulsion'] = True
+                actions_taken.append("MACRO [优化-安全]: 航线越界或擦墙，启动 [侧向斥力算子] 强制推离！")
+
+            # 2. 超高与重力势能优化 (Altitude & Gravity)
+            if details.get('altitude_violation', 0) > 0 or details.get('gravity_cost', 0) > 1500:
+                specific_params['press_down'] = True
+                actions_taken.append("MACRO [优化-高度]: 路线超高或重力能耗大，下达 [贴地压低] 指令！")
+
+            # 3. 路线平滑优化 (Smoothness)
             needs_smooth = (details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000 or details.get('loop_penalty', 0) > 0)
             if needs_smooth:
                 specific_params['apply_laplacian'] = True
-                actions_taken.append("MACRO [T3 优化-平滑]: 路线曲折！下达 [拉普拉斯平滑] 橡皮筋拉直指令！")
-
-            # 2. 安全裕度优化 (Margin)
-            if details.get('margin_violation', 0) > 0:
-                specific_params['apply_repulsion'] = True
-                actions_taken.append("MACRO [T3 优化-安全]: 航线擦墙，启动 [侧向斥力算子] 推离危险边缘！")
-
-            # 3. 贴地与重力能耗优化 (Gravity)
-            if details.get('gravity_cost', 0) > 1500:
-                specific_params['press_down'] = True
-                actions_taken.append("MACRO [T3 优化-重力]: 路线已安全，下达 [贴地压低] 指令以节省重力势能！")
+                actions_taken.append("MACRO [优化-平滑]: 路线曲折！下达 [拉普拉斯平滑] 橡皮筋拉直指令！")
 
             # 4. 自动变速箱 (Speed/Time) 优化
             change_power = details.get('change_power_pen', 0)
@@ -132,10 +118,10 @@ class CoordinatorAgent:
             
             if change_power > 50000 and current_v > 8.0:
                 self.eval_params['v_cruise'] = max(8.0, current_v - 1.5)
-                actions_taken.append(f"MACRO [T3 优化-机动]: 机动耗电过高！降速至 {self.eval_params['v_cruise']:.2f} m/s 缓解急弯！")
+                actions_taken.append(f"MACRO [优化-机动]: 机动耗电过高！降速至 {self.eval_params['v_cruise']:.2f} m/s 缓解急弯！")
             elif change_power < 15000 and current_v < 13.17:
                 self.eval_params['v_cruise'] = min(13.17, current_v + 1.0)
-                actions_taken.append(f"MACRO [T3 优化-时间]: 路线已丝滑，提速至 {self.eval_params['v_cruise']:.2f} m/s 缩短飞行时间！")
+                actions_taken.append(f"MACRO [优化-时间]: 路线已丝滑，提速至 {self.eval_params['v_cruise']:.2f} m/s 缩短飞行时间！")
 
         # ==========================================
         # 微观调控：动态加载算法专属的内部参数特工 (Algorithm Internal Tuning)
