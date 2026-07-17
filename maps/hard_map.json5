@@ -1,0 +1,78 @@
+{
+  "name": "Benchmark - Hard (220x220)",
+  "bounds": [220, 220],
+  "start_point": [110.0, 10.0],
+  "end_point": [110.0, 210.0],
+  "obstacles": [
+    // 40 个建筑物：大小错落有致，保留宽阔街区，告别拥挤的死胡同。高度最高不超过 5.0m
+    
+    // [南部片区 Y: 15-50]
+    {"type": "rect", "bottom_left": [30, 20], "width": 15, "height": 10, "z_min": 0.0, "z_max": 2.0},    // 小房
+    {"type": "rect", "bottom_left": [70, 25], "width": 20, "height": 15, "z_min": 0.0, "z_max": 4.0},    // 中型建筑
+    {"type": "polygon", "points": [[115, 20], [130, 20], [125, 30]], "z_min": 0.0, "z_max": 5.0},        // 起点右侧异形楼
+    {"type": "circle", "center": [145, 25], "radius": 5, "z_min": 0.0, "z_max": 3.0},                  // 小圆形花坛/建筑
+    {"type": "rect", "bottom_left": [165, 20], "width": 10, "height": 10, "z_min": 0.0, "z_max": 1.5},   // 门卫/附属小楼
+    {"type": "polygon", "points": [[190, 20], [205, 15], [200, 35]], "z_min": 0.0, "z_max": 4.5},        // 侧边中型楼
+    
+    // [中下片区 Y: 50-90]
+    {"type": "circle", "center": [25, 60], "radius": 4, "z_min": 0.0, "z_max": 3.5},
+    {"type": "rect", "bottom_left": [40, 55], "width": 10, "height": 20, "z_min": 0.0, "z_max": 2.5},
+    {"type": "polygon", "points": [[65, 60], [85, 55], [80, 70], [70, 75]], "z_min": 0.0, "z_max": 5.0}, // 局部地标
+    {"type": "rect", "bottom_left": [100, 50], "width": 15, "height": 15, "z_min": 0.0, "z_max": 1.5},   // 宽扁小楼
+    {"type": "circle", "center": [135, 60], "radius": 6, "z_min": 0.0, "z_max": 4.0},
+    {"type": "rect", "bottom_left": [160, 55], "width": 15, "height": 10, "z_min": 0.0, "z_max": 3.0},
+    {"type": "polygon", "points": [[185, 60], [200, 55], [195, 75]], "z_min": 0.0, "z_max": 2.0},
+    {"type": "circle", "center": [115, 75], "radius": 4, "z_min": 0.0, "z_max": 2.5},
+    
+    // [中心腹地 Y: 90-130] (有一栋大型主教学楼，其他均较小)
+    {"type": "rect", "bottom_left": [20, 95], "width": 12, "height": 12, "z_min": 0.0, "z_max": 4.5},
+    {"type": "circle", "center": [45, 100], "radius": 3, "z_min": 0.0, "z_max": 1.5},                  // 极小塔柱
+    {"type": "polygon", "points": [[60, 95], [80, 90], [85, 110], [65, 105]], "z_min": 0.0, "z_max": 3.5},
+    {"type": "rect", "bottom_left": [100, 95], "width": 25, "height": 20, "z_min": 0.0, "z_max": 5.0},   // 【大型主建筑】
+    {"type": "polygon", "points": [[140, 95], [160, 100], [155, 115], [135, 110]], "z_min": 0.0, "z_max": 2.5},
+    {"type": "circle", "center": [185, 105], "radius": 5, "z_min": 0.0, "z_max": 4.0},
+    {"type": "rect", "bottom_left": [200, 95], "width": 8, "height": 15, "z_min": 0.0, "z_max": 1.5},
+    {"type": "rect", "bottom_left": [80, 120], "width": 15, "height": 10, "z_min": 0.0, "z_max": 3.5},
+    {"type": "circle", "center": [125, 125], "radius": 4, "z_min": 0.0, "z_max": 2.0},
+    
+    // [中上片区 Y: 130-170]
+    {"type": "polygon", "points": [[15, 135], [25, 130], [30, 145]], "z_min": 0.0, "z_max": 3.0},
+    {"type": "rect", "bottom_left": [40, 135], "width": 10, "height": 20, "z_min": 0.0, "z_max": 5.0},    // 细长高楼
+    {"type": "circle", "center": [70, 145], "radius": 6, "z_min": 0.0, "z_max": 2.0},
+    {"type": "polygon", "points": [[95, 140], [125, 140], [120, 155], [100, 155]], "z_min": 0.0, "z_max": 4.5}, // 【大型主建筑2】
+    {"type": "rect", "bottom_left": [140, 145], "width": 12, "height": 12, "z_min": 0.0, "z_max": 1.5},
+    {"type": "polygon", "points": [[170, 140], [190, 145], [185, 160], [165, 155]], "z_min": 0.0, "z_max": 3.5},
+    {"type": "circle", "center": [205, 150], "radius": 4, "z_min": 0.0, "z_max": 5.0},
+    {"type": "rect", "bottom_left": [15, 160], "width": 15, "height": 10, "z_min": 0.0, "z_max": 2.5},
+
+    // [北部及终点片区 Y: 170-200]
+    {"type": "circle", "center": [45, 175], "radius": 5, "z_min": 0.0, "z_max": 1.5},
+    {"type": "polygon", "points": [[65, 170], [85, 165], [90, 180], [70, 185]], "z_min": 0.0, "z_max": 5.0},
+    {"type": "rect", "bottom_left": [105, 175], "width": 10, "height": 15, "z_min": 0.0, "z_max": 2.5},
+    {"type": "circle", "center": [135, 180], "radius": 5, "z_min": 0.0, "z_max": 3.5},
+    {"type": "polygon", "points": [[155, 175], [175, 180], [170, 195], [150, 190]], "z_min": 0.0, "z_max": 4.5},
+    {"type": "rect", "bottom_left": [190, 175], "width": 10, "height": 12, "z_min": 0.0, "z_max": 2.0},
+    {"type": "polygon", "points": [[20, 195], [35, 190], [30, 205]], "z_min": 0.0, "z_max": 1.5},
+    {"type": "rect", "bottom_left": [50, 195], "width": 15, "height": 8, "z_min": 0.0, "z_max": 3.5},
+    {"type": "circle", "center": [180, 200], "radius": 4, "z_min": 0.0, "z_max": 5.0}
+  ],
+  "target_areas": [
+    // 16 个目标，半径 2.0 ~ 6.0，散布于广场、大楼缝隙和空地之间
+    {"center": [55.0, 30.0], "radius": 4.0, "name": "H1"},
+    {"center": [100.0, 35.0], "radius": 3.0, "name": "H2"},
+    {"center": [155.0, 30.0], "radius": 5.0, "name": "H3"},
+    {"center": [35.0, 75.0], "radius": 2.0, "name": "H4"},
+    {"center": [85.0, 75.0], "radius": 6.0, "name": "H5"},  // 大广场打卡点
+    {"center": [125.0, 55.0], "radius": 3.0, "name": "H6"},
+    {"center": [175.0, 75.0], "radius": 4.0, "name": "H7"},
+    {"center": [45.0, 115.0], "radius": 5.0, "name": "H8"},
+    {"center": [95.0, 115.0], "radius": 2.0, "name": "H9"},  // 主楼旁边的窄打卡点
+    {"center": [150.0, 105.0], "radius": 4.0, "name": "H10"},
+    {"center": [190.0, 125.0], "radius": 6.0, "name": "H11"}, // 东侧边缘空地
+    {"center": [60.0, 145.0], "radius": 3.0, "name": "H12"},
+    {"center": [135.0, 140.0], "radius": 5.0, "name": "H13"},
+    {"center": [40.0, 185.0], "radius": 4.0, "name": "H14"},
+    {"center": [95.0, 185.0], "radius": 3.0, "name": "H15"},
+    {"center": [160.0, 195.0], "radius": 2.0, "name": "H16"}  // 终点前缝隙打卡
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "name": "Benchmark - Medium (120x120)",
+  "bounds": [120, 120],
+  "start_point": [60.0, 5.0],
+  "end_point": [60.0, 115.0],
+  "obstacles": [
+    // 30 个建筑物：1-2栋主楼，其余为小型附属建筑，视野通透。高度最高不超过 5.0m
+    
+    // [南部片区 Y: 10-40] (起飞点附近的开阔地带与小建筑)
+    {"type": "rect", "bottom_left": [20, 15], "width": 10, "height": 8, "z_min": 0.0, "z_max": 2.0},
+    {"type": "rect", "bottom_left": [40, 15], "width": 8, "height": 8, "z_min": 0.0, "z_max": 1.5},
+    {"type": "circle", "center": [80, 20], "radius": 4, "z_min": 0.0, "z_max": 3.0},
+    {"type": "rect", "bottom_left": [95, 15], "width": 10, "height": 10, "z_min": 0.0, "z_max": 4.0},
+    {"type": "polygon", "points": [[30, 30], [45, 30], [40, 40], [25, 35]], "z_min": 0.0, "z_max": 2.5},
+    {"type": "circle", "center": [65, 35], "radius": 3, "z_min": 0.0, "z_max": 1.5},
+    {"type": "rect", "bottom_left": [10, 45], "width": 12, "height": 8, "z_min": 0.0, "z_max": 3.5},
+    {"type": "rect", "bottom_left": [85, 35], "width": 8, "height": 12, "z_min": 0.0, "z_max": 2.0},
+    {"type": "rect", "bottom_left": [100, 40], "width": 10, "height": 15, "z_min": 0.0, "z_max": 4.5},
+    
+    // [中部腹地 Y: 40-80] (核心教学区，有大型建筑与广场)
+    {"type": "circle", "center": [20, 60], "radius": 4, "z_min": 0.0, "z_max": 2.0},
+    // 【中心大型主楼 (L型)】
+    {"type": "polygon", "points": [[35, 55], [55, 55], [55, 70], [45, 70], [45, 65], [35, 65]], "z_min": 0.0, "z_max": 5.0},
+    {"type": "circle", "center": [65, 55], "radius": 2, "z_min": 0.0, "z_max": 1.0},
+    // 【东侧中型实验楼】
+    {"type": "rect", "bottom_left": [75, 55], "width": 20, "height": 15, "z_min": 0.0, "z_max": 4.5},
+    {"type": "rect", "bottom_left": [105, 60], "width": 8, "height": 10, "z_min": 0.0, "z_max": 3.0},
+    {"type": "circle", "center": [30, 80], "radius": 3, "z_min": 0.0, "z_max": 2.5},
+    {"type": "rect", "bottom_left": [45, 80], "width": 10, "height": 8, "z_min": 0.0, "z_max": 2.0},
+    {"type": "rect", "bottom_left": [60, 75], "width": 10, "height": 10, "z_min": 0.0, "z_max": 3.5},
+    {"type": "rect", "bottom_left": [80, 80], "width": 12, "height": 8, "z_min": 0.0, "z_max": 4.0},
+    {"type": "circle", "center": [100, 80], "radius": 5, "z_min": 0.0, "z_max": 2.5},
+    
+    // [北部宿舍与食堂区 Y: 80-115] (密集的低矮小楼)
+    {"type": "polygon", "points": [[15, 95], [25, 90], [30, 100], [20, 105]], "z_min": 0.0, "z_max": 3.0},
+    {"type": "rect", "bottom_left": [40, 95], "width": 8, "height": 12, "z_min": 0.0, "z_max": 1.5},
+    {"type": "rect", "bottom_left": [55, 90], "width": 10, "height": 8, "z_min": 0.0, "z_max": 2.0},
+    {"type": "circle", "center": [75, 95], "radius": 4, "z_min": 0.0, "z_max": 4.5},
+    {"type": "rect", "bottom_left": [90, 95], "width": 15, "height": 8, "z_min": 0.0, "z_max": 3.0},
+    {"type": "circle", "center": [110, 95], "radius": 3, "z_min": 0.0, "z_max": 2.0},
+    {"type": "rect", "bottom_left": [25, 110], "width": 12, "height": 5, "z_min": 0.0, "z_max": 1.5},
+    {"type": "circle", "center": [50, 110], "radius": 2.5, "z_min": 0.0, "z_max": 1.0},
+    {"type": "polygon", "points": [[70, 105], [85, 105], [80, 115]], "z_min": 0.0, "z_max": 3.5},
+    {"type": "rect", "bottom_left": [95, 108], "width": 8, "height": 8, "z_min": 0.0, "z_max": 2.5},
+    {"type": "circle", "center": [112, 112], "radius": 3, "z_min": 0.0, "z_max": 4.0}
+  ],
+  "target_areas": [
+    // 11 个巡检目标，半径 2.0 ~ 6.0，散布在开阔地与建筑夹角处
+    {"center": [35.0, 20.0], "radius": 4.0, "name": "M1"},
+    {"center": [60.0, 25.0], "radius": 5.0, "name": "M2"},  // 核心主干道
+    {"center": [90.0, 25.0], "radius": 3.0, "name": "M3"},
+    {"center": [20.0, 40.0], "radius": 2.0, "name": "M4"},
+    {"center": [70.0, 45.0], "radius": 6.0, "name": "M5"},  // 中心大广场
+    {"center": [100.0, 30.0], "radius": 3.0, "name": "M6"},
+    {"center": [42.0, 62.0], "radius": 3.0, "name": "M7"},  // 主楼L型凹槽内部 (极其考验微操)
+    {"center": [85.0, 75.0], "radius": 4.0, "name": "M8"},
+    {"center": [25.0, 90.0], "radius": 5.0, "name": "M9"},
+    {"center": [65.0, 90.0], "radius": 2.0, "name": "M10"}, // 缝隙微小打卡点
+    {"center": [85.0, 105.0], "radius": 4.0, "name": "M11"}
+  ]
+}

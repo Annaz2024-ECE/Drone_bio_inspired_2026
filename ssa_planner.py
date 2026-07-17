@@ -1,13 +1,14 @@
 import numpy as np
+import os
 from base_planner import BasePlanner
 
 class SSAPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_sparrows=100, max_iter=200, num_waypoints=30, disturb_ratio=0.15):
+    def __init__(self, evaluator=None, num_sparrows=100, max_iter=200, num_waypoints=30, disturb_ratio=0.5):
         """
         3D 麻雀搜索算法路径规划器 (已深度重构：加入贪婪选择与三点微簇锚固)
         """
         # 【核心修复1】为应对三点锚固，强制提供充足的控制点 (11个目标*3 = 33，45足够冗余)
-        num_waypoints = max(num_waypoints, 45) 
+       # num_waypoints = max(num_waypoints, 40) 
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         
         self.num_sparrows = num_sparrows
@@ -31,39 +32,39 @@ class SSAPlanner(BasePlanner):
         self.historical_best_pos = np.zeros(self.dim)
         self.historical_best_score = np.inf
 
-    def _decode_path(self, position):
-        """
-        [子类重写] 植入贪心最近邻排序 (Nearest Neighbor Sort)
-        在每次评价前，强制理顺被打乱的麻雀基因，彻底消除 3D 航线打结与绕圈现象。
-        """
-        # 1. 将 1D 基因还原为 3D 坐标点阵
-        waypoints = position.reshape((self.num_waypoints, 3))
+    # def _decode_path(self, position):
+    #     """
+    #     [子类重写] 植入贪心最近邻排序 (Nearest Neighbor Sort)
+    #     在每次评价前，强制理顺被打乱的麻雀基因，彻底消除 3D 航线打结与绕圈现象。
+    #     """
+    #     # 1. 将 1D 基因还原为 3D 坐标点阵
+    #     waypoints = position.reshape((self.num_waypoints, 3))
         
-        # 2. 贪心最近邻排序核心逻辑
-        sorted_waypoints = []
-        current_point = self.env.start_point 
-        remaining_indices = list(range(self.num_waypoints))
+    #     # 2. 贪心最近邻排序核心逻辑
+    #     sorted_waypoints = []
+    #     current_point = self.env.start_point 
+    #     remaining_indices = list(range(self.num_waypoints))
         
-        while remaining_indices:
-            best_idx = -1
-            min_dist = float('inf')
+    #     while remaining_indices:
+    #         best_idx = -1
+    #         min_dist = float('inf')
             
-            # 遍历所有还没被连线的点，找离当前位置最近的
-            for idx in remaining_indices:
-                dist = np.linalg.norm(waypoints[idx] - current_point)
-                if dist < min_dist:
-                    min_dist = dist
-                    best_idx = idx
+    #         # 遍历所有还没被连线的点，找离当前位置最近的
+    #         for idx in remaining_indices:
+    #             dist = np.linalg.norm(waypoints[idx] - current_point)
+    #             if dist < min_dist:
+    #                 min_dist = dist
+    #                 best_idx = idx
                     
-            # 把找到的最近点加入有序列表，并将“当前位置”推进到该点
-            sorted_waypoints.append(waypoints[best_idx])
-            current_point = waypoints[best_idx]
-            remaining_indices.remove(best_idx)
+    #         # 把找到的最近点加入有序列表，并将“当前位置”推进到该点
+    #         sorted_waypoints.append(waypoints[best_idx])
+    #         current_point = waypoints[best_idx]
+    #         remaining_indices.remove(best_idx)
             
-        # 3. 拼接起终点返回
-        sorted_waypoints = np.array(sorted_waypoints)
-        full_path = np.vstack([self.env.start_point, sorted_waypoints, self.env.end_point])
-        return full_path
+    #     # 3. 拼接起终点返回
+    #     sorted_waypoints = np.array(sorted_waypoints)
+    #     full_path = np.vstack([self.env.start_point, sorted_waypoints, self.env.end_point])
+    #     return full_path
 
     def _cubic_chaotic_map(self, size):
         rho = 2.595  
@@ -295,15 +296,36 @@ class SSAPlanner(BasePlanner):
         
         return self._decode_path(self.historical_best_pos), self.convergence_curve
         
-if __name__ == "__main__":
-    planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=100, max_iter=150, num_waypoints=45)
-    best_path, history = planner.optimize()
-    #planner.evaluator.debug_target_coverage(best_path)
+# if __name__ == "__main__":
+#     planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=100, max_iter=150, num_waypoints=45)
+#     best_path, history = planner.optimize()
+#     #planner.evaluator.debug_target_coverage(best_path)
 
-    # ==========================================
-    # 🔥 【新增】：把 SSA 跑出来的 3D 路线存到本地
-    # ==========================================
-   # np.save('saved_best_path.npy', best_path)
-   # print("3D路线坐标已安全存档至 'saved_best_path.npy'！")
+#     # ==========================================
+#     # 🔥 【新增】：把 SSA 跑出来的 3D 路线存到本地
+#     # ==========================================
+#    # np.save('saved_best_path.npy', best_path)
+#    # print("3D路线坐标已安全存档至 'saved_best_path.npy'！")
     
-    planner.plot_result(best_path, history, algo_name="SSA-3D")
+#     planner.plot_result(best_path, history, algo_name="SSA-3D")
+
+if __name__ == "__main__":
+    save_dir = "SSA_new_path_evaluator"
+    os.makedirs(save_dir, exist_ok=True)
+    
+    num_runs = 1
+    all_final_scores = []
+    
+    for run_idx in range(num_runs):
+        print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
+        # 注意这里的 num_waypoints 被强制设定成了 30 以上来适应复杂的 3D 拐角
+        planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=100, max_iter=150, num_waypoints=45)
+        best_path, history = planner.optimize()
+        
+        #planner.evaluator.debug_target_coverage(best_path)
+        planner.plot_result(best_path, history, algo_name="SSA-3D", run_idx=run_idx, save_dir=None)
+        
+        final_score = history[-1] if history else None
+        all_final_scores.append(final_score)
+        with open(os.path.join(save_dir, f"run_{run_idx:02d}_score.txt"), 'w') as f:
+            f.write(f"Final score: {final_score:.2f}\n")

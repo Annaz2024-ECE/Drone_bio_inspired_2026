@@ -1,0 +1,28 @@
+{
+  "name": "Benchmark - Easy (80x80)",
+  "bounds": [80, 80],
+  "start_point": [40.0, 5.0],
+  "end_point": [40.0, 75.0],
+  "obstacles": [
+    // 10 个建筑物，高度 1.5 ~ 5.0 不等，留有宽阔航道
+    {"type": "rect", "bottom_left": [15, 15], "width": 15, "height": 10, "z_min": 0.0, "z_max": 2.0},
+    {"type": "rect", "bottom_left": [50, 15], "width": 15, "height": 10, "z_min": 0.0, "z_max": 3.5},
+    {"type": "circle", "center": [40, 30], "radius": 6, "z_min": 0.0, "z_max": 5.0},
+    {"type": "polygon", "points": [[10, 35], [25, 30], [20, 45]], "z_min": 0.0, "z_max": 1.5},
+    {"type": "rect", "bottom_left": [55, 35], "width": 15, "height": 10, "z_min": 0.0, "z_max": 4.5},
+    {"type": "circle", "center": [70, 45], "radius": 5, "z_min": 0.0, "z_max": 2.5},
+    {"type": "rect", "bottom_left": [15, 50], "width": 20, "height": 8, "z_min": 0.0, "z_max": 3.0},
+    {"type": "polygon", "points": [[45, 55], [60, 50], [50, 65]], "z_min": 0.0, "z_max": 4.0},
+    {"type": "rect", "bottom_left": [10, 65], "width": 20, "height": 6, "z_min": 0.0, "z_max": 1.5},
+    {"type": "circle", "center": [65, 70], "radius": 4, "z_min": 0.0, "z_max": 3.5}
+  ],
+  "target_areas": [
+    // 6 个巡检区域，半径 2.0 ~ 5.0
+    {"center": [30.0, 20.0], "radius": 3.0, "name": "L1"},
+    {"center": [50.0, 30.0], "radius": 5.0, "name": "L2"},
+    {"center": [20.0, 40.0], "radius": 2.0, "name": "L3"},
+    {"center": [60.0, 45.0], "radius": 4.0, "name": "L4"},
+    {"center": [40.0, 55.0], "radius": 3.0, "name": "L5"},
+    {"center": [50.0, 65.0], "radius": 4.0, "name": "L6"}
+  ]
+}

@@ -257,7 +257,7 @@ class BasePlanner:
         self.env.draw_environment_3d(ax=ax1)
         
         ax1.plot(smooth_path[:, 0], smooth_path[:, 1], smooth_path[:, 2], 
-                 color='#e65100', linewidth=3, label=f'{algo_name} Smooth Path', zorder=6)
+                 color='#d32f2f', linewidth=3, label=f'{algo_name} Smooth Path', zorder=6)
         ax1.plot(best_path[:, 0], best_path[:, 1], best_path[:, 2], 
                  color='gray', linewidth=1, linestyle='--',
                  marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)

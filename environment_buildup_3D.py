@@ -178,8 +178,11 @@ class UAVEnvironment3D:
                         
         return False
 
-    def draw_environment_3d(self, ax=None):
-        """ 绘制 3D 环境地图 """
+    def draw_environment_3d(self, ax=None, theme='ORIGINAL'):
+        """ 
+        绘制 3D 环境地图
+        :param theme: 'ORIGINAL' (JSON原色), 'REGION' (东西分色), 'HEIGHT' (蓝色高度层级), 'BLUEPRINT' (蓝图)
+        """
         if ax is None:
             fig = plt.figure(figsize=(12, 10))
             ax = fig.add_subplot(111, projection='3d')
@@ -187,11 +190,10 @@ class UAVEnvironment3D:
         ax.set_xlim(self.x_bounds)
         ax.set_ylim(self.y_bounds)
         ax.set_zlim(self.z_bounds)
-        
-        # 调整3D视角比例，避免Z轴被拉伸得太夸张
         ax.set_box_aspect([1, 1, 0.4]) 
         
-        ax.set_title(f'{self.name} - 3D UAV Environment', fontsize=14, fontweight='bold')
+        title_suffix = "" if theme == 'ORIGINAL' else f" ({theme} Theme)"
+        ax.set_title(f'{self.name} - 3D Environment{title_suffix}', fontsize=14, fontweight='bold')
         ax.set_xlabel('X Coordinate')
         ax.set_ylabel('Y Coordinate')
         ax.set_zlabel('Altitude (Z)')
@@ -200,24 +202,29 @@ class UAVEnvironment3D:
         for obs in self.obstacles:
             z_min = obs['z_min']
             z_max = obs['z_max']
-            # 获取颜色，如果没有定义则使用默认的蓝灰色
-            color = obs.get('color', '#5c6bc0')
+            
+            # ==========================================
+            # 强制应用 HEIGHT 高度热力图颜色 (彻底忽略 JSON 中的颜色)
+            # ==========================================
+            if z_max <= 1.5:
+                color = '#e3f2fd'  # 矮房：极浅蓝
+            elif z_max <= 3.0:
+                color = '#90caf9'  # 裙楼：浅蓝色
+            elif z_max <= 5.0:
+                color = '#1e88e5'  # 高楼：深蓝色
+            else:
+                color = '#0d47a1'  # 地标：藏青色/极深蓝
+            # ==========================================
             
             if obs['type'] == 'circle':
-                # ==========================================
-                # 🔥 视觉修复：将圆柱体转化为 30 边形进行硬朗风格渲染！
-                # ==========================================
                 center = obs['center']
                 r = obs['radius']
-                
-                # 均匀生成 30 个圆上的顶点
                 theta = np.linspace(0, 2 * np.pi, 30, endpoint=False)
                 pts = np.array([[center[0] + r * math.cos(t), center[1] + r * math.sin(t)] for t in theta])
                 
                 verts_bottom = [[p[0], p[1], z_min] for p in pts]
                 verts_top = [[p[0], p[1], z_max] for p in pts]
                 
-                # 构建所有的面：上下底面 + 30个侧面墙壁
                 faces = [verts_bottom, verts_top] 
                 num_pts = len(pts)
                 for i in range(num_pts):
@@ -225,97 +232,71 @@ class UAVEnvironment3D:
                     side_face = [verts_bottom[i], verts_bottom[next_i], verts_top[next_i], verts_top[i]]
                     faces.append(side_face)
                     
-                # 使用和 Polygon 完全一样的硬面材质，带有黑边，不再虚幻！
                 ax.add_collection3d(Poly3DCollection(faces, facecolors=color, linewidths=0.5, edgecolors='black', alpha=0.85))
 
-                
             elif obs['type'] == 'rect':
-                # 绘制 3D 长方体 (处理了旋转)
                 bl = obs['bottom_left']
                 w, h = obs['width'], obs['height']
                 angle = math.radians(obs.get('angle', 0.0))
                 cos_t, sin_t = math.cos(angle), math.sin(angle)
                 
-                # 计算底面4个角点
                 c0 = np.array([bl[0], bl[1]])
                 c1 = np.array([bl[0] + w*cos_t, bl[1] + w*sin_t])
                 c2 = np.array([bl[0] + w*cos_t - h*sin_t, bl[1] + w*sin_t + h*cos_t])
                 c3 = np.array([bl[0] - h*sin_t, bl[1] + h*cos_t])
                 
-                # 构建 8 个顶点
                 verts = []
                 for z in [z_min, z_max]:
                     verts.extend([[c0[0], c0[1], z], [c1[0], c1[1], z], [c2[0], c2[1], z], [c3[0], c3[1], z]])
                 
-                # 定义 6 个面
                 faces = [
-                    [verts[0], verts[1], verts[2], verts[3]], # 底面
-                    [verts[4], verts[5], verts[6], verts[7]], # 顶面
-                    [verts[0], verts[1], verts[5], verts[4]], # 侧面1
-                    [verts[1], verts[2], verts[6], verts[5]], # 侧面2
-                    [verts[2], verts[3], verts[7], verts[6]], # 侧面3
-                    [verts[3], verts[0], verts[4], verts[7]]  # 侧面4
+                    [verts[0], verts[1], verts[2], verts[3]],
+                    [verts[4], verts[5], verts[6], verts[7]],
+                    [verts[0], verts[1], verts[5], verts[4]],
+                    [verts[1], verts[2], verts[6], verts[5]],
+                    [verts[2], verts[3], verts[7], verts[6]],
+                    [verts[3], verts[0], verts[4], verts[7]] 
                 ]
-                ax.add_collection3d(Poly3DCollection(faces, facecolors=color, linewidths=0.5, edgecolors='black', alpha=0.6))
+                ax.add_collection3d(Poly3DCollection(faces, facecolors=color, linewidths=0.5, edgecolors='black', alpha=0.85))
             
             elif obs['type'] == 'polygon':
-                # ==========================================
-                # 【新增】通用多边形 3D 拉伸渲染逻辑
-                # 无论是半圆形、L型还是五角星，只要是 Polygon 都能完美生成 3D 建筑！
-                # ==========================================
                 pts = np.array(obs['points'])
-                
-                # 构建底面和顶面的顶点
                 verts_bottom = [[p[0], p[1], z_min] for p in pts]
                 verts_top = [[p[0], p[1], z_max] for p in pts]
                 
-                faces = [verts_bottom, verts_top] # 先把上下两个盖子放进面集合里
-                
-                # 遍历多边形的每条边，向上拉伸生成侧面
+                faces = [verts_bottom, verts_top]
                 num_pts = len(pts)
                 for i in range(num_pts):
                     next_i = (i + 1) % num_pts
-                    # 侧面的四个点顺序：底1 -> 底2 -> 顶2 -> 顶1
                     side_face = [verts_bottom[i], verts_bottom[next_i], verts_top[next_i], verts_top[i]]
                     faces.append(side_face)
                     
-                # 将所有面打包渲染，并涂上专属颜色
                 ax.add_collection3d(Poly3DCollection(faces, facecolors=color, linewidths=0.5, edgecolors='black', alpha=0.85))
             
-        # 绘制巡检目标区域圆柱体（线框模式）
+        # 绘制巡检目标区域圆柱体
         for target in self.target_areas:
             t_center = target['center']
             t_r = target['radius']
             z_min = target.get('z_min', 0)
             z_max = target.get('z_max', 0)
 
-            # 创建圆柱侧面的网格
             u = np.linspace(0, 2*np.pi, 30)
             v = np.linspace(z_min, z_max, 10)
             u, v = np.meshgrid(u, v)
             X = t_center[0] + t_r * np.cos(u)
             Y = t_center[1] + t_r * np.sin(u)
             Z = v
-
-            # 绘制半透明侧面
             ax.plot_surface(X, Y, Z, alpha=0.2, color='green', edgecolor='none')
 
-            # 绘制底面和顶面的半透明圆盘（可选）
             theta = np.linspace(0, 2*np.pi, 50)
             x_circ = t_center[0] + t_r * np.cos(theta)
             y_circ = t_center[1] + t_r * np.sin(theta)
-            # 底面
-            ax.plot(x_circ, y_circ, np.full_like(theta, z_min), 
-                    color='#43a047', linewidth=2, alpha=0.5)
-            # 顶面
-            ax.plot(x_circ, y_circ, np.full_like(theta, z_max), 
-                    color='#43a047', linewidth=2, alpha=0.5)
+            ax.plot(x_circ, y_circ, np.full_like(theta, z_min), color='#43a047', linewidth=2, alpha=0.5)
+            ax.plot(x_circ, y_circ, np.full_like(theta, z_max), color='#43a047', linewidth=2, alpha=0.5)
 
-            # 添加标签（中心高度）
             ax.text(t_center[0], t_center[1], (z_min + z_max) / 2,
                     target['name'], color='#2e7d32', fontweight='bold')
 
-        # 绘制起点和终点 (放在 Z=0，也可以根据需要调整)
         ax.scatter(*self.start_point, color='#fbc02d', s=100, marker='*', label='Start Gate', edgecolors='black', zorder=5)
         ax.scatter(*self.end_point, color='#d32f2f', s=80, marker='^', label='End Gate', zorder=5)
         
@@ -327,7 +308,7 @@ class UAVEnvironment3D:
 # ==========================================
 if __name__ == "__main__":
     # 注意：确保文件路径与你的 json5 对应
-    env = UAVEnvironment3D('maps/zijingang_2.json5')
+    env = UAVEnvironment3D('maps/hard_map.json5')
     
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')
