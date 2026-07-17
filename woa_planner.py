@@ -28,25 +28,13 @@ class WOAPlanner(BasePlanner):
             self.target_anchors.append([center_x, center_y, z_mid])
         # 【优化 1】：参考论文，将纯随机初始化升级为“混合莱维飞行初始化”
         self.positions = self._hybrid_initialization()
+        # 调参
+        self.b = 1.0
+        self.levy_scale = 0.05
+        self.p_threshold = 0.5
+        self.a_decay_power = 1.0
     
-    def _levy_step(self, dim):
-        """
-        使用经典 Mantegna 算法生成莱维飞行步长向量
-        """
-        beta = 1.5  # 论文推荐的特征指数
-        
-        # 计算 Mantegna 算法中的标准差 sigma_u
-        num = math.gamma(1 + beta) * math.sin(math.pi * beta / 2)
-        den = math.gamma((1 + beta) / 2) * beta * (2 ** ((beta - 1) / 2))
-        sigma_u = (num / den) ** (1 / beta)
-        
-        # 生成正态分布随机数
-        u = np.random.normal(0, sigma_u, dim)
-        v = np.random.normal(0, 1, dim)
-        
-        # 计算莱维步长
-        step = u / (np.abs(v) ** (1 / beta))
-        return step
+    
     
     def _hybrid_initialization(self):
         """
@@ -103,26 +91,29 @@ class WOAPlanner(BasePlanner):
       
     def optimize(self):
         print("开始 3D 环境下 WOA 鲸鱼优化算法路径规划(无安全边距+最近邻排序)...")
-        
+        b_val = getattr(self, 'b', 1.0)
+        levy_scale = getattr(self, 'levy_scale', 0.05)
+        p_thresh = getattr(self, 'p_threshold', 0.5)
+        a_power = getattr(self, 'a_decay_power', 1.0)
         for i in range(self.pop_size):
             path = self._decode_path(self.positions[i, :])
-            score, _, _ = self.evaluator.evaluate_pso_particle(path)
+            score, _, _ = self.evaluator.evaluate_particle(path)
             if score < self.historical_best_score:
                 self.historical_best_score = score
                 self.historical_best_pos = self.positions[i, :].copy()
 
         for t in range(self.max_iter):
-            a = 2.0 * np.cos((np.pi * t) / (2 * self.max_iter))
+            
+            a = 2.0 * (np.cos((np.pi * t) / (2 * self.max_iter)) ** a_power)
             
             for i in range(self.pop_size):
                 r1, r2 = np.random.random(), np.random.random()
                 A = 2.0 * a * r1 - a
                 C = 2.0 * r2
                 p = np.random.random()
-                b = 1.0
                 l = np.random.uniform(-1, 1)
 
-                if p < 0.5:
+                if p < p_thresh:
                     if abs(A) >= 1:
                         rand_idx = np.random.randint(0, self.pop_size)
                         rand_pos = self.positions[rand_idx, :]
@@ -130,13 +121,13 @@ class WOAPlanner(BasePlanner):
                         
                         levy_jump = self._levy_step(self.dim)
                         # 将莱维大跳跃叠加到位置更新公式中（权重控制在 5% 以内保证收敛平稳）
-                        new_pos = rand_pos - A * D_x_rand + levy_jump * 0.05 * (self.ub - self.lb)
+                        new_pos = rand_pos - A * D_x_rand + levy_jump * levy_scale * (self.ub - self.lb)
                     else:
                         D_Leader = abs(C * self.historical_best_pos - self.positions[i, :])
                         new_pos = self.historical_best_pos - A * D_Leader
                 else:
                     D_Leader = abs(self.historical_best_pos - self.positions[i, :])
-                    new_pos = D_Leader * np.exp(b * l) * np.cos(2 * np.pi * l) + self.historical_best_pos
+                    new_pos = D_Leader * np.exp(b_val * l) * np.cos(2 * np.pi * l) + self.historical_best_pos
 
                 
                 clipped_pos = np.clip(new_pos, self.lb, self.ub)
@@ -158,7 +149,7 @@ class WOAPlanner(BasePlanner):
             for i in range(self.pop_size):
            # 评估新位置
                 path = self._decode_path(self.positions[i, :])
-                score, _, _ = self.evaluator.evaluate_pso_particle(path)
+                score, _, _ = self.evaluator.evaluate_particle(path)
 
                 if score < self.historical_best_score and np.any(self.positions[i,:]):
                     self.historical_best_score = score
@@ -177,7 +168,7 @@ class WOAPlanner(BasePlanner):
 if __name__ == "__main__":
     start_time = time.time()  # 记录起点时间
     # 建议航点数至少大于等于目标区域数量 (haining.json5 中有 11 个 target)
-    planner = WOAPlanner(num_waypoints=25, pop_size=60, max_iter=200)
+    planner = WOAPlanner(num_waypoints=20, pop_size=20, max_iter=50)
     
     best_path, convergence_history = planner.optimize()
     

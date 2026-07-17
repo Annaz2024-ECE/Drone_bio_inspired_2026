@@ -1,4 +1,5 @@
 import numpy as np
+import math
 import matplotlib.pyplot as plt
 import os
 import time
@@ -32,6 +33,9 @@ class BasePlanner:
         self.historical_best_score = float("inf")
         self.convergence_curve = []
 
+        # 莱维通用默认参数
+        self.levy_beta = 1.5      # 莱维飞行指数
+        self.levy_scale = 0.05    # 步长缩放因子（步长权重）
         # 【新增】算法实例化的瞬间，按下计时秒表！
         self.start_time = time.time()
 
@@ -40,6 +44,28 @@ class BasePlanner:
         waypoints = position.reshape((self.num_waypoints, 3))
         full_path = np.vstack([self.env.start_point, waypoints, self.env.end_point])
         return full_path
+
+    def _levy_step(self, dim):
+        """
+        使用经典 Mantegna 算法生成通用莱维飞行步长向量。
+        支持通过 self.levy_beta 动态调节其分布形状。
+        """
+        # 动态获取当前实例的 beta 值，若未定义则使用默认值 1.5
+        beta = getattr(self, 'levy_beta', 1.5)
+        
+        # 计算 Mantegna 算法中的标准差 sigma_u
+        num = math.gamma(1 + beta) * math.sin(math.pi * beta / 2)
+        den = math.gamma((1 + beta) / 2) * beta * (2 ** ((beta - 1) / 2))
+        sigma_u = (num / den) ** (1 / beta)
+        sigma_v = 1.0
+        
+        # 生成正态分布随机数
+        u = np.random.normal(0, sigma_u, dim)
+        v = np.random.normal(0, sigma_v, dim)
+        
+        # 计算步长
+        step = u / (np.abs(v) ** (1 / beta))
+        return step
 
     def _generate_heuristic_skeleton(self):
         """ [新增通用方法] 生成 3D 启发式拓扑骨架 (超级基因) """

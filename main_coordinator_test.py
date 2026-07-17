@@ -7,7 +7,7 @@ from pso_planner import PSOPlanner
 from gwo_planner import GWOPlanner
 from ssa_planner import SSAPlanner
 from woa_planner_fix import WOAPlanner
-from ga_planner import GAPlanner
+from ga_planner1 import GAPlanner
 
 import time
 
@@ -31,7 +31,7 @@ def run_parameter_tuning_loop():
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "GWO" 
+    TARGET_ALGO = "WOA" 
     
     print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
@@ -43,7 +43,7 @@ def run_parameter_tuning_loop():
         'evaluator': evaluator,
         # 紫金港地图目标较多，控制点建议调大至 40-50 左右
         # 海宁设置为16 比较合适
-        'num_waypoints': 16, 
+        'num_waypoints': 15, 
         'max_iter': agent.algo_params['max_iter']
        # 'max_iter': 10
     }
@@ -58,7 +58,7 @@ def run_parameter_tuning_loop():
     # 带着正确的种群规模出生，底层 3D 矩阵直接完美生成！
     planner = PlannerClass(**kwargs)
     
-    meta_rounds = 5  # 调参总轮数
+    meta_rounds = 2  # 调参总轮数
 
     # ==========================================
     # 🔥 【新增】：大循环启动前，初始化所有全局追踪器
