@@ -29,7 +29,9 @@ class GWOPlanner(BasePlanner):
             chaos_seq[i] = x
         return (chaos_seq + 1.0) / 2.0
 
-    # 莱维飞行 (Lévy Flight) 数学发生器
+    # ==========================================
+    # 核心大招：莱维飞行 (Lévy Flight) 数学发生器
+    # ==========================================
     def _levy_flight(self, shape, beta=1.5):
         """
         使用 Mantegna 算法生成莱维飞行步长。
@@ -49,34 +51,38 @@ class GWOPlanner(BasePlanner):
 
     def _initialize_wolves(self):
         positions = np.zeros((self.num_wolves, self.dim))
-        targets_3d = []
-        for t in self.env.target_areas:
-            z_mid = (t.get('z_min', 0.0) + t.get('z_max', 20.0)) / 2.0
-            targets_3d.append(np.array([t['center'][0], t['center'][1], z_mid]))
         
+        # 1. 呼叫基类的贪心算法，生成完美拓扑骨架（超级狼！）
+        super_wolf = self._generate_heuristic_skeleton()
+        
+        # 2. 将这只超级狼直接设为第 0 号狼（内定开局 Alpha 狼候选）
+        positions[0] = super_wolf
+
         center_x = (self.env.x_bounds[0] + self.env.x_bounds[1]) / 2.0
         center_y = (self.env.y_bounds[0] + self.env.y_bounds[1]) / 2.0
-        targets_3d.sort(key=lambda p: np.arctan2(p[1] - center_y, p[0] - center_x))
 
-        for i in range(self.num_wolves):
-            chaos_x = self._cubic_chaotic_map(self.num_waypoints)
-            chaos_y = self._cubic_chaotic_map(self.num_waypoints)
-            chaos_z = self._cubic_chaotic_map(self.num_waypoints)
-            
-            rand_x = self.env.x_bounds[0] + chaos_x * (self.env.x_bounds[1] - self.env.x_bounds[0])
-            rand_y = self.env.y_bounds[0] + chaos_y * (self.env.y_bounds[1] - self.env.y_bounds[0])
-            rand_z = max(5.0, self.env.z_bounds[0]) + chaos_z * (self.env.z_bounds[1] - max(5.0, self.env.z_bounds[0]))
-            
-            raw_pts = np.column_stack((rand_x, rand_y, rand_z))
-
+        for i in range(1, self.num_wolves):
+            # 3. 前 30% 的精英狼：以超级狼为基础，施加微弱的高斯噪声，在最优解附近密集探索
             if i < int(self.num_wolves * 0.3):
-                for j, tgt in enumerate(targets_3d):
-                    if j < self.num_waypoints:
-                        raw_pts[j] = tgt
-
-            angles = np.arctan2(raw_pts[:, 1] - center_y, raw_pts[:, 0] - center_x)
-            sorted_pts = raw_pts[np.argsort(angles)]
-            positions[i] = np.clip(sorted_pts.flatten(), self.lb, self.ub)
+                noise = np.random.normal(0, 3.0, self.dim)
+                positions[i] = np.clip(super_wolf + noise, self.lb, self.ub)
+                
+            # 4. 剩下 70% 的平民狼：保留原汁原味的 Cubic 混沌映射，在全图保持极高的多样性防死锁
+            else:
+                chaos_x = self._cubic_chaotic_map(self.num_waypoints)
+                chaos_y = self._cubic_chaotic_map(self.num_waypoints)
+                chaos_z = self._cubic_chaotic_map(self.num_waypoints)
+                
+                rand_x = self.env.x_bounds[0] + chaos_x * (self.env.x_bounds[1] - self.env.x_bounds[0])
+                rand_y = self.env.y_bounds[0] + chaos_y * (self.env.y_bounds[1] - self.env.y_bounds[0])
+                rand_z = max(5.0, self.env.z_bounds[0]) + chaos_z * (self.env.z_bounds[1] - max(5.0, self.env.z_bounds[0]))
+                
+                raw_pts = np.column_stack((rand_x, rand_y, rand_z))
+                
+                # 保留圆周角度排序，防止产生蝴蝶结交叉航线
+                angles = np.arctan2(raw_pts[:, 1] - center_y, raw_pts[:, 0] - center_x)
+                sorted_pts = raw_pts[np.argsort(angles)]
+                positions[i] = np.clip(sorted_pts.flatten(), self.lb, self.ub)
 
         return positions
 
@@ -159,8 +165,10 @@ class GWOPlanner(BasePlanner):
                         noise = np.random.randn(self.num_waypoints, 3) * 2.0
                         self.positions[i] = np.clip((new_pos + noise).flatten(), self.lb, self.ub)
             else:
-                # 用莱维飞行替换高斯噪声！
+                # ==========================================
+                # 终极大招：用莱维飞行替换高斯噪声！
                 # 乘以 0.01 是为了约束它“超级瞬移”时的物理边界，不让它飞出地球
+                # ==========================================
                 noise = self._levy_flight((self.num_wolves, self.dim)) * (self.ub - self.lb) * mutation_scale * 0.01
                 
                 if is_emergency:

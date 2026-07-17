@@ -178,16 +178,21 @@ class BasePlanner:
 
     def execute_universal_physics_directives(self):
         """ 
-        【基类通用方法】统一执行老中医下发的物理动作！
-        任何继承本基类的算法，只需在迭代末尾调用此方法，就能拥有全套物理技能！
+        【基类通用方法】统一执行老中医下发的物理动作！(渐进式升级版)
         """
-        # 1. 响应【拉普拉斯平滑】指令 (消除锯齿)
-        if getattr(self, 'apply_laplacian', False):
-            self.positions = self.apply_laplacian_smoothing(self.positions, apply_ratio=0.5)
+        # 读取指挥部下发的“油门踏板”强度。如果之前的老代码没传，默认为 0.0 (关闭)
+        lap_intensity = getattr(self, 'laplacian_intensity', 0.0)
+        rep_intensity = getattr(self, 'repulsion_intensity', 0.0)
+
+        # 1. 响应【拉普拉斯平滑】渐进指令 (消除锯齿)
+        if lap_intensity > 0.0:
+            # 将 0.0~1.0 的强度直接作为种群的覆盖概率
+            self.positions = self.apply_laplacian_smoothing(self.positions, apply_ratio=lap_intensity)
             
-        # 2. 响应【侧向斥力推离】指令 (消除擦墙)
-        if getattr(self, 'apply_repulsion', False):
-            self.positions = self.apply_margin_repulsion(self.positions, apply_ratio=0.4)
+        # 2. 响应【侧向斥力推离】渐进指令 (消除擦墙)
+        if rep_intensity > 0.0:
+            # 将 0.0~1.0 的强度直接作为种群的覆盖概率
+            self.positions = self.apply_margin_repulsion(self.positions, apply_ratio=rep_intensity)
 
     def optimize(self):
         """ [抽象方法] 核心的迭代寻优逻辑，必须由继承的子类自己实现！ """

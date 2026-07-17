@@ -17,6 +17,18 @@ class CoordinatorAgent:
         # 专门用来记忆上一次下发的微观算法参数
         self.last_specific_params = {}
 
+        # ==========================================
+        # 物理干预强度记忆体 (0.0 表示关闭，1.0 表示满功率)
+        # ==========================================
+        self.intensities = {
+            'laplacian': 0.0,
+            'repulsion': 0.0,
+            'lift_up': 0.0,
+            'press_down': 0.0
+        }
+        # 渐进因子：每轮最多增加或减少 20% 的强度，给种群留出 5 轮的适应缓冲期
+        self.gradient_step = 0.2
+
     def analyze_and_act(self, total_score, details, env_info, current_algo):
         # ==========================================
         # 调参前，先给所有当前参数“拍照存档”
@@ -36,6 +48,7 @@ class CoordinatorAgent:
         specific_params['lift_up'] = False          
         specific_params['apply_laplacian'] = False  
         specific_params['apply_repulsion'] = False  
+        specific_params['shattering_kick'] = False
         
         print(f"\n[调参] 第 {self.meta_iteration} 轮诊断中... (当前执行算法: {current_algo})")
 
@@ -69,6 +82,10 @@ class CoordinatorAgent:
         else:
             self.stuck_counter = 0
 
+        # 提前计算 needs_smooth，供两阶段共用
+        needs_smooth = (details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000)
+        has_loops = details.get('loop_penalty', 0) > 0 # 将绕圈判定升级为独立的“结构性危机”
+
         # ------------------------------------------
         # 阶段 1 (生死底线)：撞墙、漏打卡
         # ------------------------------------------
@@ -88,40 +105,74 @@ class CoordinatorAgent:
             if self.algo_params['max_iter'] < 500:
                 self.algo_params['max_iter'] += 50
                 
+            # 在危机状态下，强行缓慢撤销高级平滑和斥力干预，把自由度还给保命动作
+            self.intensities['laplacian'] = max(0.0, self.intensities['laplacian'] - self.gradient_step)
+            self.intensities['repulsion'] = max(0.0, self.intensities['repulsion'] - self.gradient_step)
+                
         # ------------------------------------------
         # 阶段 2 (全面精修优化)：合规、平滑、能耗、时间
-        # 只要活着，且做完了任务，剩下的问题全丢进池子里一起解决！
         # ------------------------------------------
         else:
             self.eval_params['max_turn_angle'] = 120.0
             print("  [状态] 危机解除，进入全面精修优化阶段 (合规、平滑、能耗)...")
             
-            # 1. 越界与擦墙优化 (Boundary & Margin)
-            if details.get('boundary_violation', 0) > 0 or details.get('margin_violation', 0) > 0:
-                specific_params['apply_repulsion'] = True
-                actions_taken.append("MACRO [优化-安全]: 航线越界或擦墙，启动 [侧向斥力算子] 强制推离！")
+            # 【关键改动 3】：重拳治乱！优先解决绕圈死结，再谈精修
+            if has_loops:
+                specific_params['shattering_kick'] = True
+                # 强行给底层算法下发超高探索特权，暴力破局
+                specific_params['mutation_rate'] = 0.8     # 80%的狼强制变异
+                specific_params['mutation_scale'] = 5.0    # 允许产生最大 5 米的大跨步跳跃
+                # 当航线打结时，必须立刻刹车，降低平滑强度，不让拉普拉斯帮倒忙
+                self.intensities['laplacian'] = max(0.0, self.intensities['laplacian'] - self.gradient_step * 2)
+                actions_taken.append("MACRO [拓扑破局]: 检测到严重的航线绕圈死结！激活 [高能扰动算子]，压制平滑，强制狼群炸开探索！")
+            else:
+                # 只有不绕圈时，拉普拉斯平滑才允许正常渐进
+                if needs_smooth:
+                    self.intensities['laplacian'] = min(1.0, self.intensities['laplacian'] + self.gradient_step)
+                    actions_taken.append(f"MACRO [优化-平滑]: 路线曲折，拉普拉斯平滑渐进至 {self.intensities['laplacian']*100:.0f}%")
+                else:
+                    self.intensities['laplacian'] = max(0.0, self.intensities['laplacian'] - self.gradient_step)
 
-            # 2. 超高与重力势能优化 (Altitude & Gravity)
+            # 越界与擦墙优化 (Boundary & Margin)
+            if details.get('boundary_violation', 0) > 0 or details.get('margin_violation', 0) > 0:
+                self.intensities['repulsion'] = min(1.0, self.intensities['repulsion'] + self.gradient_step)
+                actions_taken.append(f"MACRO [优化-安全]: 航线越界，侧向斥力渐进至 {self.intensities['repulsion']*100:.0f}%")
+            else:
+                self.intensities['repulsion'] = max(0.0, self.intensities['repulsion'] - self.gradient_step)
+
+            # --- 互斥防爆锁 ---
+            if self.intensities['laplacian'] > 0.5 and self.intensities['repulsion'] > 0.5:
+                self.intensities['laplacian'] *= 0.7
+                self.intensities['repulsion'] *= 0.7
+                actions_taken.append("⚠️ [冲突抑制]: 平滑与斥力同时高强度触发，启动消解因子防畸变")
+
+            # 超高与重力势能优化 (Altitude & Gravity)
             if details.get('altitude_violation', 0) > 0 or details.get('gravity_cost', 0) > 1500:
                 specific_params['press_down'] = True
                 actions_taken.append("MACRO [优化-高度]: 路线超高或重力能耗大，下达 [贴地压低] 指令！")
 
-            # 3. 路线平滑优化 (Smoothness)
-            needs_smooth = (details.get('sharp_turn', 0) > 0 or details.get('smoothness', 0) > 2000 or details.get('loop_penalty', 0) > 0)
-            if needs_smooth:
-                specific_params['apply_laplacian'] = True
-                actions_taken.append("MACRO [优化-平滑]: 路线曲折！下达 [拉普拉斯平滑] 橡皮筋拉直指令！")
-
-            # 4. 自动变速箱 (Speed/Time) 优化
+            # 4. 自动变速箱 (Speed/Time) 优化 - 【顺便调优：降低阈值至 40000 让你刚才的 4.2万 能够成功触发降速】
             change_power = details.get('change_power_pen', 0)
             current_v = self.eval_params['v_cruise']
             
-            if change_power > 50000 and current_v > 8.0:
+            if change_power > 40000 and current_v > 8.0: # 阈值从5w调到4w
                 self.eval_params['v_cruise'] = max(8.0, current_v - 1.5)
                 actions_taken.append(f"MACRO [优化-机动]: 机动耗电过高！降速至 {self.eval_params['v_cruise']:.2f} m/s 缓解急弯！")
-            elif change_power < 15000 and current_v < 13.17:
+            elif change_power < 15000 and current_v < 13.17 and not has_loops: # 绕圈时不瞎提速
                 self.eval_params['v_cruise'] = min(13.17, current_v + 1.0)
                 actions_taken.append(f"MACRO [优化-时间]: 路线已丝滑，提速至 {self.eval_params['v_cruise']:.2f} m/s 缩短飞行时间！")
+
+        # ==========================================
+        # 统一装载物理干预强度并下发给 Planner
+        # ==========================================
+        self.intensities['laplacian'] = round(self.intensities['laplacian'], 3)
+        self.intensities['repulsion'] = round(self.intensities['repulsion'], 3)
+
+        specific_params['laplacian_intensity'] = self.intensities['laplacian']
+        specific_params['repulsion_intensity'] = self.intensities['repulsion']
+        
+        specific_params['apply_laplacian'] = self.intensities['laplacian'] > 0
+        specific_params['apply_repulsion'] = self.intensities['repulsion'] > 0
 
         # ==========================================
         # 微观调控：动态加载算法专属的内部参数特工 (Algorithm Internal Tuning)
@@ -143,7 +194,7 @@ class CoordinatorAgent:
             actions_taken.append("MAINTAIN (当前状态极佳，全军保持原方推进)")
 
         # ==========================================
-        # 【新增】：精准的状态比对引擎 (State Diff)
+        # 精准的状态比对引擎 (State Diff)
         # ==========================================
         param_changes = []
         
