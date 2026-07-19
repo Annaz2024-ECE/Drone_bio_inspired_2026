@@ -180,7 +180,7 @@ if __name__ == "__main__":
             # 【新增】：在终端用高亮颜色实时打印出调参明细
             print(f"\n  [\033[96m特工干预档案\033[0m] 在第 {global_iteration_count} 代触发硬核数值切变:")
             for change in param_changes:
-                print(f"    👉 {change}")
+                print(f"    {change}")
             
         # 调整评价器物理规则
         evaluator.params.update(new_eval_params)

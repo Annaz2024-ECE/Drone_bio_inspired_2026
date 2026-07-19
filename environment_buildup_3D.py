@@ -308,7 +308,7 @@ class UAVEnvironment3D:
 # ==========================================
 if __name__ == "__main__":
     # 注意：确保文件路径与你的 json5 对应
-    env = UAVEnvironment3D('maps/hard_map.json5')
+    env = UAVEnvironment3D('maps/medium_map.json5')
     
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection='3d')

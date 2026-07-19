@@ -129,7 +129,7 @@ class Algorithm_Select_Agent:
         接收标准化的 JSON 决策（无论是由 LLM 生成，还是 Mock 生成），执行物理映射。
         """
         print("\n" + "=" * 65)
-        print("[仿生优化智能体] 正在解析 大脑决策 (JSON Payload)...")
+        print("[仿生优化智能体] 正在解析 LLM决策 (JSON Payload)...")
         print(f"   -> 思考逻辑: {decision_json['reasoning']}")
         print(f"   -> 评估风险: {decision_json['risk_level']}")
         
@@ -281,11 +281,11 @@ class Algorithm_Select_Agent:
                 response_format={"type": "json_object"}, 
                 temperature=0.1, 
                 timeout=15.0,
-                extra_body={"thinking": {"type": "disabled"}}
+                extra_body={"thinking": {"type": "enabled"}}
             )
             
             result_str = response.choices[0].message.content
-            print("   -> [API 响应] 云端大脑决策接收成功！")
+            print("   -> [API 响应] 云端LLM决策接收成功！")
 
             # ==========================================
             # 【新增】：将 LLM 的原始输出打印到终端供你赏玩
@@ -329,7 +329,7 @@ class Algorithm_Select_Agent:
         final_pop, final_iter, final_waypoints = self._fine_tune_parameters(algo_name, num_targets, num_obstacles)
         
         print(f"   -> 最终委派算法: \033[96m{algo_name}\033[0m")
-        print(f"   -> 算力调度清单: 种群数 = {final_pop}, 迭代 = {final_iter}, 基因长度 = {final_waypoints}")
+        print(f"   -> 初始化参数: 种群数 = {final_pop}, 迭代 = {final_iter}, 基因长度 = {final_waypoints}")
         print("=" * 65 + "\n")
         
         # 4. 统一打包实例化
