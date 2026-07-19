@@ -1,36 +1,28 @@
 {
-"name": "Benchmark - Easy (80x80)",
-"bounds": [80, 80],
-"start_point": [40.0, 5.0],
-"end_point": [40.0, 75.0],
-"obstacles": [
-// 10 个建筑物：体积小巧，向内收缩，不再紧贴边界，依然保持中央广阔的无遮挡空域
-
-// [左侧建筑群] (从原本的 X=2~5 向内移动到 X=8~15 附近)
-{"type": "rect", "bottom_left": [10, 20], "width": 6, "height": 8, "z_min": 0.0, "z_max": 2.0},      // 左下角极小矮房
-{"type": "polygon", "points": [[12, 42], [19, 38], [15, 46]], "z_min": 0.0, "z_max": 1.5},         // 左侧极小碎石堆/灌木丛
-{"type": "circle", "center": [15, 62], "radius": 2.5, "z_min": 0.0, "z_max": 3.0},                 // 左上角极细塔柱
-{"type": "rect", "bottom_left": [12, 70], "width": 8, "height": 4, "z_min": 0.0, "z_max": 2.5},      // 左上边缘小围墙
-
-// [右侧建筑群] (从原本的 X=72~75 向内移动到 X=63~68 附近)
-{"type": "rect", "bottom_left": [64, 25], "width": 6, "height": 8, "z_min": 0.0, "z_max": 2.5},    // 右下角小亭子
-{"type": "circle", "center": [66, 48], "radius": 3.0, "z_min": 0.0, "z_max": 4.0},                 // 右侧细长路灯杆
-{"type": "polygon", "points": [[62, 68], [71, 65], [68, 72]], "z_min": 0.0, "z_max": 1.5},         // 右上角小土丘
-
-// [中央广袤空地上的零星点缀] (极微小障碍，微调位置使整体更均衡)
-{"type": "rect", "bottom_left": [35, 38], "width": 2.5, "height": 2.5, "z_min": 0.0, "z_max": 1.5},// 广袤中央的垃圾桶/小电箱
-{"type": "circle", "center": [50, 58], "radius": 1.5, "z_min": 0.0, "z_max": 3.5},                 // 极细信号杆
-{"type": "rect", "bottom_left": [28, 25], "width": 3, "height": 3, "z_min": 0.0, "z_max": 1.0}       // 偏左一点的微小花坛
-
-
-],
-"target_areas": [
-// 6 个巡检区域：保持在开阔地带，无任何遮挡
-{"center": [40.0, 20.0], "radius": 5.0, "name": "L1"}, // 纵向起飞后的大目标
-{"center": [25.0, 35.0], "radius": 4.0, "name": "L2"}, // 左侧开阔地
-{"center": [55.0, 35.0], "radius": 3.0, "name": "L3"}, // 右侧开阔地
-{"center": [40.0, 50.0], "radius": 6.0, "name": "L4"}, // 核心中央超级大广场打卡
-{"center": [25.0, 65.0], "radius": 3.0, "name": "L5"}, // 左上广阔区域
-{"center": [55.0, 65.0], "radius": 4.0, "name": "L6"}  // 右上广阔区域
-]
+  "name": "Benchmark - Easy (80x80)",
+  "bounds": [80, 80],
+  "start_point": [40.0, 5.0],
+  "end_point": [40.0, 75.0],
+  "obstacles": [
+    // 10 个建筑物，高度 1.5 ~ 5.0 不等，留有宽阔航道
+    {"type": "rect", "bottom_left": [15, 15], "width": 15, "height": 10, "z_min": 0.0, "z_max": 2.0},
+    {"type": "rect", "bottom_left": [50, 15], "width": 15, "height": 10, "z_min": 0.0, "z_max": 3.5},
+    {"type": "circle", "center": [40, 30], "radius": 6, "z_min": 0.0, "z_max": 5.0},
+    {"type": "polygon", "points": [[10, 35], [25, 30], [20, 45]], "z_min": 0.0, "z_max": 1.5},
+    {"type": "rect", "bottom_left": [55, 35], "width": 15, "height": 10, "z_min": 0.0, "z_max": 4.5},
+    {"type": "circle", "center": [70, 45], "radius": 5, "z_min": 0.0, "z_max": 2.5},
+    {"type": "rect", "bottom_left": [15, 50], "width": 20, "height": 8, "z_min": 0.0, "z_max": 3.0},
+    {"type": "polygon", "points": [[45, 55], [60, 50], [50, 65]], "z_min": 0.0, "z_max": 4.0},
+    {"type": "rect", "bottom_left": [10, 65], "width": 20, "height": 6, "z_min": 0.0, "z_max": 1.5},
+    {"type": "circle", "center": [65, 70], "radius": 4, "z_min": 0.0, "z_max": 3.5}
+  ],
+  "target_areas": [
+    // 6 个巡检区域，半径 2.0 ~ 5.0
+    {"center": [30.0, 20.0], "radius": 3.0, "name": "L1"},
+    {"center": [50.0, 30.0], "radius": 5.0, "name": "L2"},
+    {"center": [20.0, 40.0], "radius": 2.0, "name": "L3"},
+    {"center": [60.0, 45.0], "radius": 4.0, "name": "L4"},
+    {"center": [40.0, 55.0], "radius": 3.0, "name": "L5"},
+    {"center": [50.0, 65.0], "radius": 4.0, "name": "L6"}
+  ]
 }
