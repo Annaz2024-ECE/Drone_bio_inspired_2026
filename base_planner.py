@@ -316,7 +316,13 @@ class BasePlanner:
         
         # 降维绘制 2D 建筑物
         for obs in self.env.obstacles:
-            color = obs.get('color', '#5c6bc0')
+            z_max = obs.get('z_max', 20.0)
+            if z_max <= 1.5: color = '#e3f2fd'
+            elif z_max <= 3.0: color = '#90caf9'
+            elif z_max <= 5.0: color = '#1e88e5'
+            else: color = '#0d47a1' 
+
+            #color = obs.get('color', '#5c6bc0')
             if obs['type'] == 'circle':
                 circle = plt.Circle(obs['center'][:2], obs['radius'], color=color, alpha=0.7, ec='black')
                 ax_2d.add_patch(circle)
@@ -374,11 +380,17 @@ class BasePlanner:
                          bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.85, edgecolor=color))
         
         # 算法参数展示
+        excluded_params = [
+            'start_time', 'emergency_escape', 'radar_guidance', 
+            'lift_up', 'press_down', 'apply_laplacian', 'apply_repulsion', 'laplacian_intensity', 'repulsion_intensity'
+        ]
+
         params_list = []
         for k, v in self.__dict__.items():
             if isinstance(v, (int, float)) and not k.startswith('_') \
                and 'score' not in k and 'pos' not in k and 'bound' not in k \
-               and k not in ['lb', 'ub', 'dim']:
+               and k not in ['lb', 'ub', 'dim'] \
+               and k not in excluded_params:
                 val_str = f"{v:.2f}" if isinstance(v, float) else str(v)
                 params_list.append(f"  {k}: {val_str}")
             
