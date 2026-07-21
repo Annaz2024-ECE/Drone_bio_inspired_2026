@@ -69,6 +69,62 @@ class BasePlanner:
         step = u / (np.abs(v) ** (1 / beta))
         return step
 
+    def _generate_basic_skeleton(self):
+        """ 
+        [新增] 基础版 TSP 骨架生成器
+        不包含三点微簇锚固和高空拱门技术。
+        仅通过最近邻算法连接打卡点，并将剩余的航点均匀插值在连线上。
+        适合不需要强制贯穿控制或者航点数量较少的场景。
+        """
+        start = self.env.start_point
+        end = self.env.end_point
+        
+        targets_3d = []
+        for t in self.env.target_areas:
+            center = t['center']
+            z_mid = (t.get('z_min', 0) + t.get('z_max', 10)) / 2.0
+            targets_3d.append(np.array([center[0], center[1], z_mid]))
+        
+        # 1. 最近邻 TSP 排序
+        unvisited = targets_3d.copy()
+        sorted_targets = []
+        current = start
+        while unvisited:
+            distances = [np.linalg.norm(p - current) for p in unvisited]
+            idx = np.argmin(distances)
+            nearest = unvisited.pop(idx)
+            sorted_targets.append(nearest)
+            current = nearest
+        
+        # 2. 基础连线：每个目标只给 1 个控制点 (不再是 3 个微簇)
+        control_pts = []
+        for t in sorted_targets:
+            control_pts.append(t)
+            
+        # 3. 均匀插值：在最长间距中插入剩余的控制点 (不加高空拱门逻辑)
+        while len(control_pts) < self.num_waypoints:
+            max_gap = -1.0
+            max_idx = 0
+            temp_path = [start] + control_pts + [end]
+            for i in range(len(temp_path) - 1):
+                gap = np.linalg.norm(temp_path[i+1] - temp_path[i])
+                if gap > max_gap:
+                    max_gap = gap
+                    max_idx = i
+                    
+            # 简单的线性中点插值
+            mid_point = (temp_path[max_idx] + temp_path[max_idx+1]) / 2.0
+            
+            if max_idx == 0: 
+                control_pts.insert(0, mid_point)
+            elif max_idx == len(temp_path) - 1: 
+                control_pts.append(mid_point)
+            else: 
+                control_pts.insert(max_idx, mid_point)
+                
+        control_pts = control_pts[:self.num_waypoints]
+        return np.clip(np.array(control_pts).flatten(), self.lb, self.ub)
+
     def _generate_heuristic_skeleton(self):
         """ [新增通用方法] 生成 3D 启发式拓扑骨架 (超级基因) """
         start = self.env.start_point
