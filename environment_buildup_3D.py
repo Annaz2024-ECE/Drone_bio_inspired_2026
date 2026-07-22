@@ -7,13 +7,20 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from mpl_toolkits.mplot3d import art3d
 from shapely.geometry import Point, LineString, Polygon
 import shapely.affinity as affinity
+import os
 
 
 class UAVEnvironment3D:
     """升级版3D地图环境：读取JSON配置，提供3D碰撞检测与3D可视化"""
-    def __init__(self, json_path):
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = pyjson5.load(f)
+    def __init__(self, json_path=None, data_dict=None):
+        # 兼容两种初始化方式：读取文件 或 直接传入字典
+        if json_path:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = pyjson5.load(f)
+        elif data_dict:
+            data = data_dict
+        else:
+            raise ValueError("必须提供 json_path 或 data_dict")
         
         self.name = data['name']
         self.x_bounds = [0, data['bounds'][0]]
@@ -303,49 +310,144 @@ class UAVEnvironment3D:
         ax.legend(loc='upper left')
         return ax
 
+# # ==========================================
+# # 3D 环境本地测试代码
+# # ==========================================
+# if __name__ == "__main__":
+#     # 注意：确保文件路径与你的 json5 对应
+#     env = UAVEnvironment3D('maps/medium_map.json5')
+    
+#     fig = plt.figure(figsize=(10, 8))
+#     ax = fig.add_subplot(111, projection='3d')
+#     env.draw_environment_3d(ax)
+
+#     # ax.legend(loc='upper right')
+#     plt.tight_layout()
+#     plt.show()
+
+
 # ==========================================
-# 3D 环境本地测试代码
+# 随机地图生成工具类
+# ==========================================
+class RandomMapGenerator:
+    @staticmethod
+    def generate_random_targets(base_json_path, num_targets=6, radius_range=(2.0, 5.0), safe_margin=1.0):
+        """
+        保持基础地图不变，随机生成不碰撞、不重叠的巡检目标。
+        
+        :param base_json_path: 基础地图文件路径 (提供建筑物、起终点、边界)
+        :param num_targets: 需要生成的巡检区数量 (默认 6)
+        :param radius_range: 巡检区半径范围 (min_radius, max_radius)
+        :param safe_margin: 目标区域与建筑物之间、目标与目标之间留出的最小安全缓冲距离
+        :return: 包含随机目标的新字典 (可以直接丢给 UAVEnvironment3D)
+        """
+        # 1. 加载基础地图数据
+        with open(base_json_path, 'r', encoding='utf-8') as f:
+            data = pyjson5.load(f)
+            
+        x_bounds = data['bounds'][0]
+        y_bounds = data['bounds'][1]
+        
+        # 2. 将所有障碍物转换为 Shapely 对象，以便判断不交叠
+        shapely_obstacles = []
+        for obs in data['obstacles']:
+            if obs['type'] == 'circle':
+                poly = Point(obs['center'][:2]).buffer(obs['radius'])
+            elif obs['type'] == 'rect':
+                bl = obs['bottom_left'][:2]
+                w, h = obs['width'], obs['height']
+                angle = obs.get('angle', 0.0)
+                rect = Polygon([
+                    (bl[0], bl[1]), (bl[0] + w, bl[1]), 
+                    (bl[0] + w, bl[1] + h), (bl[0], bl[1] + h)
+                ])
+                poly = affinity.rotate(rect, angle, origin=(bl[0], bl[1]), use_radians=False)
+            elif obs['type'] == 'polygon':
+                poly = Polygon(obs['points'])
+            shapely_obstacles.append(poly)
+            
+        # 3. 开始投点拒绝算法 (Generate & Test)
+        new_targets = []
+        attempts = 0
+        max_attempts = 5000  # 防止死循环
+        
+        while len(new_targets) < num_targets and attempts < max_attempts:
+            attempts += 1
+            
+            # 随机生成半径和圆心 (注意边界限制，不能让圆切到地图外)
+            r = np.random.uniform(radius_range[0], radius_range[1])
+            cx = np.random.uniform(r + safe_margin, x_bounds - r - safe_margin)
+            cy = np.random.uniform(r + safe_margin, y_bounds - r - safe_margin)
+            
+            target_poly = Point(cx, cy).buffer(r + safe_margin)
+            
+            is_valid = True
+            
+            # 校验一：不能撞击建筑物
+            for obs_poly in shapely_obstacles:
+                if target_poly.intersects(obs_poly):
+                    is_valid = False
+                    break
+                    
+            if not is_valid: continue
+            
+            # 校验二：不能和已经生成的目标重叠
+            for existing_target in new_targets:
+                ex_pt = Point(existing_target['center'][0], existing_target['center'][1])
+                ex_poly = ex_pt.buffer(existing_target['radius'] + safe_margin)
+                if target_poly.intersects(ex_poly):
+                    is_valid = False
+                    break
+                    
+            if not is_valid: continue
+            
+            # 校验三：不能覆盖起终点
+            start_pt = Point(data['start_point'][:2])
+            end_pt = Point(data['end_point'][:2])
+            if target_poly.intersects(start_pt) or target_poly.intersects(end_pt):
+                continue
+                
+            # 校验通过，保存目标
+            new_targets.append({
+                "center": [float(cx), float(cy)],
+                "radius": float(r),
+                "name": f"L{len(new_targets) + 1}"
+            })
+            
+        if len(new_targets) < num_targets:
+            print(f"警告: 只成功生成了 {len(new_targets)} 个目标 (请求 {num_targets} 个)。可能是地图太满。")
+            
+        # 4. 更新并返回新的地图字典
+        data['target_areas'] = new_targets
+        data['name'] = f"{data['name']} (Randomized)"
+        return data
+
+
+# ==========================================
+# 3D 环境本地测试代码 (现在测试随机地图生成)
 # ==========================================
 if __name__ == "__main__":
-    # 注意：确保文件路径与你的 json5 对应
-    env = UAVEnvironment3D('maps/medium_map.json5')
+    # 使用基础地图模板生成随机目标地图
+    # （这里的文件路径填你本地真实存在的如 'maps/easy_map.json5'）
+    base_map_path = 'maps/medium_map.json5' 
     
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
-    env.draw_environment_3d(ax)
-    
-    # ---------------- 3D 碰撞检测测试 ----------------
-    
-    # 路线1: 【安全航线】直接拔高到 30m 高空，径直飞跃中心建筑群 (最高建筑为 25m)
-    p_safe_1 = np.array([43.0, 3.0, 10.0])
-    p_safe_2 = np.array([43.0, 50.0, 10.0]) # 飞跃中心圆塔 (高 25m)
-    p_safe_3 = np.array([51.0, 94.0, 10.0]) # 飞向终点
-    
-    # 路线2: 【穿模航线】在 5m 低空，直线横穿中心建筑群
-    p_collide_1 = np.array([43.0, 3.0, 5.0])
-    p_collide_2 = np.array([43.0, 50.0, 5.0]) # 必定撞楼
-    p_collide_3 = np.array([51.0, 94.0, 5.0])
-    
-    # 检测相交 (任意一段碰撞即为 True)
-    safe_collision = env.is_segment_collision(p_safe_1, p_safe_2) or env.is_segment_collision(p_safe_2, p_safe_3)
-    collide_collision = env.is_segment_collision(p_collide_1, p_collide_2) or env.is_segment_collision(p_collide_2, p_collide_3)
-    
-    print("-" * 40)
-    print(f"✅ 测试 - 高空安全航线检测 (应为 False): {safe_collision}")
-    print(f"❌ 测试 - 低空穿模航线检测 (应为 True): {collide_collision}")
-    print("-" * 40)
-    
-    # 在 3D 图上画出这两条测试航线
-    # ax.plot([p_safe_1[0], p_safe_2[0], p_safe_3[0]], 
-    #         [p_safe_1[1], p_safe_2[1], p_safe_3[1]], 
-    #         [p_safe_1[2], p_safe_2[2], p_safe_3[2]], 
-    #         color='#4caf50', linestyle='-', linewidth=2.5, label='Safe Test Path (Alt: 30)')
-            
-    # ax.plot([p_collide_1[0], p_collide_2[0], p_collide_3[0]], 
-    #         [p_collide_1[1], p_collide_2[1], p_collide_3[1]], 
-    #         [p_collide_1[2], p_collide_2[2], p_collide_3[2]], 
-    #         color='#f44336', linestyle='--', linewidth=2.5, label='Collision Path (Alt: 5)')
-            
-    ax.legend(loc='upper right')
-    plt.tight_layout()
-    plt.show()
+    if os.path.exists(base_map_path):
+        random_map_dict = RandomMapGenerator.generate_random_targets(
+            base_json_path=base_map_path,
+            num_targets=6,          # 你要多少个巡检区
+            radius_range=(2.0, 5.0), # 大小的分布
+            safe_margin=1.0          # 保留1米的缓冲不贴脸
+        )
+        
+        # 使用生成的字典初始化环境
+        env = UAVEnvironment3D(data_dict=random_map_dict)
+        
+        fig = plt.figure(figsize=(10, 8))
+        ax = fig.add_subplot(111, projection='3d')
+        env.draw_environment_3d(ax)
+        
+        ax.legend(loc='upper right')
+        plt.tight_layout()
+        plt.show()
+    else:
+        print(f"请提供真实的地图路径。找不到文件: {base_map_path}")

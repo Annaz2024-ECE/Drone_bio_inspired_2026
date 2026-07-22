@@ -36,7 +36,7 @@ class PSOPlanner(BasePlanner):
 
     def _initialize_particles(self):
         particles = np.zeros((self.num_particles, self.dim))
-        super_skeleton = self._generate_heuristic_skeleton()
+        super_skeleton = self._generate_basic_skeleton()
         
         particles[0] = super_skeleton
         
@@ -86,7 +86,7 @@ class PSOPlanner(BasePlanner):
             for i in range(self.num_particles):
                 if i in mutate_indices and i != best_idx:
                     decay = max(0.01, (1.0 - iteration / self.max_iter) ** 2)
-                    noise = np.random.randn(self.dim) * 5.0 * decay * self.z_mask
+                    noise = self._levy_step(self.dim) * 5.0 * decay * self.z_mask
                     self.particles[i] = self.historical_best_pos + noise
                     self.velocities[i] = 0.0 
                     self.particles[i] = np.clip(self.particles[i], self.lb, self.ub)
@@ -124,10 +124,13 @@ class PSOPlanner(BasePlanner):
             is_emergency = getattr(self, 'emergency_escape', False)
             is_lift_up = getattr(self, 'lift_up', False)
             is_press_down = getattr(self, 'press_down', False)
+            is_shatter = getattr(self, 'shattering_kick', False)
 
-            if is_radar or is_emergency or is_lift_up or is_press_down:
-                mutation_rate = 0.1
-                if is_emergency: mutation_rate = 0.5
+            if is_radar or is_emergency or is_lift_up or is_press_down or is_shatter:
+                mutation_rate = getattr(self, 'mutation_rate', 0.1)
+
+                if is_shatter: mutation_rate = getattr(self, 'mutation_rate', 0.8)
+                elif is_emergency: mutation_rate = 0.5
                 elif is_lift_up: mutation_rate = 0.4
                 elif is_press_down: mutation_rate = 0.3
                 
@@ -158,18 +161,22 @@ class PSOPlanner(BasePlanner):
                             self.pbest_scores[i] = score
                             self.pbest_pos[i] = np.copy(self.particles[i])
                 else:
-                    noise = np.zeros((self.num_particles, self.dim))
+                    mutation_scale = getattr(self, 'mutation_scale', 5.0)
+                    levy_matrix = np.array([self._levy_step(self.dim) for _ in range(self.num_particles)])
+                    noise = levy_matrix * (self.ub - self.lb) * mutation_scale * 0.01 * self.z_mask
+
                     if is_emergency:
                         for d in range(2, self.dim, 3): noise[:, d] = 15.0 
                     elif is_lift_up:
                         for d in range(2, self.dim, 3): noise[:, d] = 8.0  
                     elif is_press_down:
                         for d in range(2, self.dim, 3): noise[:, d] = -3.0 
+
+                    mutated_particles = self.historical_best_pos + noise
                     
                     for i in range(self.num_particles):
                         if do_mutation[i]:
-                            self.particles[i] += noise[i]
-                            self.particles[i] = np.clip(self.particles[i], self.lb, self.ub)
+                            self.particles[i] = np.clip(mutated_particles[i], self.lb, self.ub)
                             self.velocities[i] = 0.0 
                             
                             # 【修复核心】：物理位移后的评估
@@ -187,6 +194,7 @@ class PSOPlanner(BasePlanner):
                 self.emergency_escape = False
                 self.lift_up = False
                 self.press_down = False
+                self.shattering_kick = False
 
             self.convergence_curve.append(self.historical_best_score)
             
@@ -196,18 +204,18 @@ class PSOPlanner(BasePlanner):
         return self._decode_path(self.historical_best_pos), self.convergence_curve
 
 if __name__ == "__main__":
-    save_dir = "PSO_new_path_evaluator"
+    save_dir = "PSO_random_map"
     os.makedirs(save_dir, exist_ok=True)
     
-    num_runs = 1
+    num_runs = 5
     all_final_scores = []
     
     for run_idx in range(num_runs):
         print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
-        planner = PSOPlanner(num_particles=100, max_iter=150, num_waypoints=30)
+        planner = PSOPlanner(num_particles=50, max_iter=100, num_waypoints=12)
         best_path, history = planner.optimize()
         
-        planner.plot_result(best_path, history, algo_name="PSO-3D", run_idx=run_idx, save_dir=None)
+        planner.plot_result(best_path, history, algo_name="PSO-3D", run_idx=run_idx, save_dir=save_dir)
         
         final_score = history[-1] if history else None
         all_final_scores.append(final_score)

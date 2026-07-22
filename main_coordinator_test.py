@@ -1,4 +1,4 @@
-from wakepy import keep #挂后台跑
+#from wakepy import keep #挂后台跑
 from path_evaluator import PathEvaluator
 from coordinator_agent import CoordinatorAgent
 
@@ -8,10 +8,13 @@ from gwo_planner import GWOPlanner
 from ssa_planner import SSAPlanner
 from woa_planner import WOAPlanner
 from ga_planner import GAPlanner
+from woa_planner import WOAPlanner
+from ga_planner import GAPlanner
 
 import time
+import os
 
-def run_parameter_tuning_loop():
+def run_parameter_tuning_loop(run_idx=None, save_dir=None):
     print("=" * 60)
     print(" 启动 [3D 空间算法专属参数调优 Agent]")
     print("=" * 60)
@@ -31,7 +34,7 @@ def run_parameter_tuning_loop():
     }
     
     # 你只需修改这里！想测谁，就改成谁的名字
-    TARGET_ALGO = "GWO" 
+    TARGET_ALGO = "SSA" 
     
     print(f"  [系统加载] 正在实例化 3D {TARGET_ALGO} 算法矩阵...")
     PlannerClass = ALGO_MAP[TARGET_ALGO]
@@ -43,21 +46,22 @@ def run_parameter_tuning_loop():
         'evaluator': evaluator,
         # 紫金港地图目标较多，控制点建议调大至 40-50 左右
         # 海宁设置为16 比较合适
-        'num_waypoints': 12, 
+        'num_waypoints': 35, 
         'max_iter': agent.algo_params['max_iter']
        # 'max_iter': 10
     }
     
     # 精准对接各个算法底层所需的变量名
     pop_size = agent.algo_params['pop_size']
-    if TARGET_ALGO == "PSO": kwargs['num_particles'] = pop_size
+    if TARGET_ALGO == "PSO": kwargs['num_particles'] = 100
     elif TARGET_ALGO == "GWO": kwargs['num_wolves'] = pop_size
-    elif TARGET_ALGO == "SSA": kwargs['num_sparrows'] = pop_size
+    elif TARGET_ALGO == "SSA": kwargs['num_sparrows'] = 100
     elif TARGET_ALGO in ["WOA"]: kwargs['pop_size'] = pop_size 
 
     # 带着正确的种群规模出生，底层 3D 矩阵直接完美生成！
     planner = PlannerClass(**kwargs)
     
+    meta_rounds = 5  # 调参总轮数
     meta_rounds = 5  # 调参总轮数
 
     # ==========================================
@@ -164,16 +168,40 @@ def run_parameter_tuning_loop():
         best_path, 
         history, 
         algo_name=f"{TARGET_ALGO}_Final_3D_Tuned",
+        run_idx=run_idx,
+        save_dir=save_dir,
         global_start_time=global_start_time,
         event_history=event_history
     )
 
+# ==========================================
+# 【修改3】主程序：跑 10 次并保存结果
+# ==========================================
 if __name__ == "__main__":
     print("\n 开始底层 3D 寻优，已开启防休眠模式...")
     
-    # 用 with 语句把整个主程序的大循环包起来
-    with keep.running():
-        # 注意这一行一定要有缩进！
-        run_parameter_tuning_loop()
-        
-    print("\n 3D 路径规划全部完成，电脑恢复正常休眠策略。")
+    # 创建保存目录
+    save_dir = "SSA_Agent_RandomMap"
+    os.makedirs(save_dir, exist_ok=True)
+    
+    num_runs = 5
+    all_scores = []
+    
+    for run_idx in range(num_runs):
+        print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
+        final_score = run_parameter_tuning_loop(run_idx=run_idx, save_dir=save_dir)
+        all_scores.append(final_score)
+    
+    # 输出统计汇总
+    print("\n" + "="*50)
+    print("所有运行完成！结果保存在", save_dir)
+    print("各次最终得分:")
+    for i, score in enumerate(all_scores):
+        print(f"  Run {i+1:02d}: {score:,.2f}")
+    if all_scores:
+        avg = np.mean(all_scores)
+        std = np.std(all_scores)
+        print(f"\n平均得分: {avg:,.2f}  (±{std:,.2f})")
+    print("="*50)
+
+    

@@ -82,7 +82,7 @@ class SSAPlanner(BasePlanner):
         # ==========================================
         # 1. 获取 TSP + 拱门 的“无敌拓扑骨架” (保证初始不撞墙)
         # ==========================================
-        super_skeleton = self._generate_heuristic_skeleton()
+        super_skeleton = self._generate_basic_skeleton()
         
         # ==========================================
         # 2. 精英部队 (前 20%)：围绕无敌骨架微调，保有指路明灯
@@ -91,7 +91,7 @@ class SSAPlanner(BasePlanner):
         sparrows[0] = super_skeleton # 第0号直接封神，保底 10 万分起步！
         
         for i in range(1, elite_count):
-            noise = np.random.normal(0, 3.0, self.dim) * self.z_mask
+            noise = self._levy_step(self.dim) * 3.0 * self.z_mask
             sparrows[i] = np.clip(super_skeleton + noise, self.lb, self.ub)
 
         # ==========================================
@@ -165,20 +165,20 @@ class SSAPlanner(BasePlanner):
                 else:
                     new_sparrows[idx] = self.sparrows[idx] + np.random.uniform(-1, 1) * (np.abs(self.sparrows[idx] - worst_pos_current) / (self.fitness[idx] - worst_fit_current + 1e-8))
             
-            # ==========================================
-            # 【新增：破壁者机制】抓取 20% 麻雀强行在最优解附近引爆
-            # ==========================================
-            mutate_count = int(self.num_sparrows * 0.2)
-            # 随机挑选 20% 的倒霉蛋，但绝不碰当前表现最好的那只
-            mutate_indices = np.random.choice(self.num_sparrows, mutate_count, replace=False)
-            if sort_indices[0] in mutate_indices:
-                mutate_indices = np.delete(mutate_indices, np.where(mutate_indices == sort_indices[0]))
+            # # ==========================================
+            # # 【新增：破壁者机制】抓取 20% 麻雀强行在最优解附近引爆
+            # # ==========================================
+            # mutate_count = int(self.num_sparrows * 0.2)
+            # # 随机挑选 20% 的倒霉蛋，但绝不碰当前表现最好的那只
+            # mutate_indices = np.random.choice(self.num_sparrows, mutate_count, replace=False)
+            # if sort_indices[0] in mutate_indices:
+            #     mutate_indices = np.delete(mutate_indices, np.where(mutate_indices == sort_indices[0]))
                 
-            for idx in mutate_indices:
-                # 以最佳麻雀为中心，产生 3.0 米的高斯噪声球，并压制 Z 轴暴走
-                noise = np.random.randn(self.dim) * 3.0 * self.z_mask
-                new_sparrows[idx] = best_pos_current + noise
-            # ==========================================
+            # for idx in mutate_indices:
+            #     # 以最佳麻雀为中心，产生 3.0 米的高斯噪声球，并压制 Z 轴暴走
+            #     noise = np.random.randn(self.dim) * 3.0 * self.z_mask
+            #     new_sparrows[idx] = best_pos_current + noise
+            # # ==========================================
 
             # ==========================================
             # >>> 【完美缝隙】：触发基类的通用物理引擎 (拉普拉斯平滑) <<<
@@ -217,12 +217,13 @@ class SSAPlanner(BasePlanner):
             is_emergency = getattr(self, 'emergency_escape', False)
             is_lift_up = getattr(self, 'lift_up', False)
             is_press_down = getattr(self, 'press_down', False)
+            is_shatter = getattr(self, 'shattering_kick', False)
 
             # 只要触发了全局动作，就启动底层基因强行干预（无视贪婪法则）
-            if is_radar or is_emergency or is_lift_up or is_press_down:
-                
-                mutation_rate = 0.1
-                if is_emergency: mutation_rate = 0.5
+            if is_radar or is_emergency or is_lift_up or is_press_down or is_shatter:
+                mutation_rate = getattr(self, 'mutation_rate', 0.1)
+                if is_shatter: mutation_rate = getattr(self, 'mutation_rate', 0.8)
+                elif is_emergency: mutation_rate = 0.5
                 elif is_lift_up: mutation_rate = 0.4
                 elif is_press_down: mutation_rate = 0.3
                 
@@ -255,7 +256,10 @@ class SSAPlanner(BasePlanner):
                 
                 # 2. 物理推力逻辑 (Z轴强制位移)
                 else:
-                    noise = np.zeros((self.num_sparrows, self.dim))
+                    mutation_scale = getattr(self, 'mutation_scale', 5.0)
+                    levy_matrix = np.array([self._levy_step(self.dim) for _ in range(self.num_sparrows)])
+                    noise = levy_matrix * (self.ub - self.lb) * mutation_scale * 0.01 * self.z_mask
+
                     if is_emergency:
                         for d in range(2, self.dim, 3): noise[:, d] = 15.0 
                     elif is_lift_up:
@@ -263,12 +267,10 @@ class SSAPlanner(BasePlanner):
                     elif is_press_down:
                         for d in range(2, self.dim, 3): noise[:, d] = -3.0 
                     
+                    mutated_sparrows = best_pos_current + noise
                     for i in range(self.num_sparrows):
                         if do_mutation[i]:
-                            self.sparrows[i] += noise[i]
-                            self.sparrows[i] = np.clip(self.sparrows[i], self.lb, self.ub)
-                            
-                            # 【核心斩断贪婪陷阱】：无视分数变差，强行更新肉体记忆
+                            self.sparrows[i] = np.clip(mutated_sparrows[i], self.lb, self.ub)
                             full_path = self._decode_path(self.sparrows[i])
                             self.fitness[i], _, _ = self.evaluator.evaluate_particle(full_path)
 
@@ -287,6 +289,7 @@ class SSAPlanner(BasePlanner):
                 self.emergency_escape = False
                 self.lift_up = False
                 self.press_down = False
+                self.shattering_kick = False
             # ==========================================
             
             self.convergence_curve.append(self.historical_best_score)

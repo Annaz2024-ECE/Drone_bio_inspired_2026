@@ -2,13 +2,20 @@ import os
 os.environ['OPENBLAS_NUM_THREADS'] = '1'  # 限制底层数学计算引擎只用单线程，防止内存冲突
 import numpy as np
 import matplotlib.pyplot as plt
-from environment_buildup_3D import UAVEnvironment3D  
+from environment_buildup_3D import UAVEnvironment3D, RandomMapGenerator  
 import scipy.interpolate as spl
 
 class PathEvaluator:
-    def __init__(self):
+    def __init__(self, randomize_targets=True):
         # 实例化3D环境
-        self.env = UAVEnvironment3D('maps/easy_map.json5') # 假设你现在跑紫金港
+        base_map = 'maps/hard_map.json5'
+        if randomize_targets:
+            # 启动随机模式！
+            map_data = RandomMapGenerator.generate_random_targets(base_map, num_targets=16)
+            self.env = UAVEnvironment3D(data_dict=map_data)
+        else:
+            # 常规固定测试模式
+            self.env = UAVEnvironment3D(json_path=base_map)
         
         # 基础惩罚权重
         self.penalties = {
