@@ -3,7 +3,7 @@ import importlib
 class CoordinatorAgent:
     def __init__(self):
         # 宏观参数
-        self.algo_params = {'pop_size': 50, 'max_iter': 100}
+        self.algo_params = {'pop_size': 20, 'max_iter': 100}
         self.eval_params = {
             'bspline_num_points': 100, 
             'min_waypoint_dist': 5.0,
@@ -64,7 +64,7 @@ class CoordinatorAgent:
                      details.get('sharp_turn', 0) == 0 and
                      details.get('altitude_violation', 0) == 0)
         
-        if is_perfectly_safe and (self.meta_iteration > 1) and (improvement_rate < 0.01):
+        if is_perfectly_safe and (self.meta_iteration > 1) and (improvement_rate < 0.005):
             print(f"   [全局通知] 3D 航线已绝对安全，且收敛至极限(进步率 < 0.5%)，申请提前结束")
             is_finished = True
             return self.algo_params, self.eval_params, specific_params, is_finished, []
@@ -144,7 +144,7 @@ class CoordinatorAgent:
             if self.intensities['laplacian'] > 0.5 and self.intensities['repulsion'] > 0.5:
                 self.intensities['laplacian'] *= 0.7
                 self.intensities['repulsion'] *= 0.7
-                actions_taken.append("⚠️ [冲突抑制]: 平滑与斥力同时高强度触发，启动消解因子防畸变")
+                actions_taken.append(" [冲突抑制]: 平滑与斥力同时高强度触发，启动消解因子防畸变")
 
             # 超高与重力势能优化 (Altitude & Gravity)
             if details.get('altitude_violation', 0) > 0 or details.get('gravity_cost', 0) > 1500:

@@ -8,7 +8,7 @@ import scipy.interpolate as spl
 class PathEvaluator:
     def __init__(self):
         # 实例化3D环境
-        self.env = UAVEnvironment3D('maps/zijingang_2.json5') # 假设你现在跑紫金港
+        self.env = UAVEnvironment3D('maps/easy_map.json5') # 假设你现在跑紫金港
         
         # 基础惩罚权重
         self.penalties = {
@@ -305,7 +305,7 @@ class PathEvaluator:
                     details['margin_violation'] += layer_penalty
 
         # ==========================================
-        # 急转弯 & 动态限速能耗计算 (修正爆炸 Bug)
+        # 急转弯 & 动态限速能耗计算 (双轴加速度)
         # ==========================================
         max_turn = self.params.get('max_turn_angle', 120.0)
         sharp_turn_pen = self.penalties.get('sharp_turn', 10000.0)
@@ -321,27 +321,39 @@ class PathEvaluator:
             if angle > max_turn:
                 details['sharp_turn'] += sharp_turn_pen
                 
-            # 1. 读取当前区域应该保持的速度 (外面13.17，里面5.0)
-            v_local = self._get_local_speed(p_curr)
+            # ----------------------------------------------------
+            # 获取两点的速度差，计算双轴加速度
+            # ----------------------------------------------------
+            # 1. 分别获取上一段和当前段的速度限制
+            v_prev_local = self._get_local_speed(p_prev)
+            v_curr_local = self._get_local_speed(p_curr)
             
-            delta_v = v_local * np.radians(angle)
             dist_seg = np.linalg.norm(p_curr - p_prev)
+            dist_seg = max(dist_seg, 0.5)  # 防爆锁，防止除以 0
             
-            # 设定计算距离底线！
-            # B样条会生成非常密集的点，dist_seg接近于0会导致加速度趋于无穷大
-            dist_seg = max(dist_seg, 0.5) 
+            # 2. 使用平均速度计算通过这段航段的真实时间 dt
+            v_avg = (v_prev_local + v_curr_local) / 2.0
+            dt = dist_seg / v_avg
             
-            dt = dist_seg / v_local
-            accel = delta_v / dt  # 向心机动加速度
+            # 3. 计算双轴加速度
+            # a. 向心加速度 (转弯带来的横向过载)
+            delta_v_turn = v_curr_local * np.radians(angle)
+            accel_turn = delta_v_turn / dt
             
-            # 新版双层惩罚机制
+            # b. 线性/纵向加速度 (切换速度状态时的急刹车/急加速)
+            accel_linear = abs(v_curr_local - v_prev_local) / dt
+            
+            # c. 总机动加速度 (勾股定理合成物理矢量)
+            accel = np.sqrt(accel_turn**2 + accel_linear**2)
+            # ----------------------------------------------------
+            
+            # 新版双层惩罚机制 (无缝对接原版代码，变量名沿用 accel)
             if accel > accel_threshold:
                 # 严重超标：平方级暴击惩罚 (急加急刹)
                 excess_accel = accel - accel_threshold
                 details['change_power_pen'] += (excess_accel ** 2) * change_power_multiplier
             elif accel > 0.1:
-                # 没超标但有加速度(比如微小转弯)：极小的线性惩罚
-                # 这会极大地鼓励无人机尽全力保持 0 加速度（纯直线匀速航行）
+                # 没超标但有加速度：极小的线性惩罚
                 details['change_power_pen'] += accel * (change_power_multiplier * 0.05)
 
         details['missed_target'] += self.calculate_target_penalty(path_points)

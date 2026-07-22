@@ -29,25 +29,6 @@ class GWOPlanner(BasePlanner):
             chaos_seq[i] = x
         return (chaos_seq + 1.0) / 2.0
 
-    # ==========================================
-    # 核心大招：莱维飞行 (Lévy Flight) 数学发生器
-    # ==========================================
-    def _levy_flight(self, shape, beta=1.5):
-        """
-        使用 Mantegna 算法生成莱维飞行步长。
-        特点：绝大部分是小数值(微调)，偶尔出现极大的极端数值(大跳跃)。
-        """
-        # 计算标准差 sigma
-        sigma = (math.gamma(1 + beta) * math.sin(math.pi * beta / 2) / 
-                 (math.gamma((1 + beta) / 2) * beta * 2 ** ((beta - 1) / 2))) ** (1 / beta)
-        
-        # u 和 v 都服从正态分布
-        u = np.random.normal(0, sigma, shape)
-        v = np.random.normal(0, 1, shape)
-        
-        # 核心公式，计算莱维步长。防止分母为0加上 1e-8
-        step = u / np.power(np.maximum(np.abs(v), 1e-8), 1 / beta)
-        return step
 
     def _initialize_wolves(self):
         positions = np.zeros((self.num_wolves, self.dim))
@@ -135,51 +116,51 @@ class GWOPlanner(BasePlanner):
             is_lift_up = getattr(self, 'lift_up', False)        
             is_radar = getattr(self, 'radar_guidance', False)   
             
-            if is_radar:
-                mutation_rate = 0.1  
-            elif is_emergency:
-                mutation_rate = 0.5  
-                mutation_scale = 0.5 
-            elif is_lift_up:
-                mutation_rate = 0.4  
-                mutation_scale = 0.2
-            elif is_press_down:
-                mutation_rate = 0.3  
-                mutation_scale = 0.1 
-            
             do_mutation = np.random.rand(self.num_wolves) < mutation_rate
-            do_mutation[0] = False 
+            do_mutation[0] = False
             do_mutation[1] = False 
             
+            # ==========================================
+            # 肌肉层执行动作：微创手术版 (拒绝破坏整体航线)
+            # ==========================================
             if is_radar:
+                # 1. 提取目标点三维坐标
                 targets_3d = []
                 for t in self.env.target_areas:
                     z_mid = (t.get('z_min', 0.0) + t.get('z_max', 20.0)) / 2.0
                     targets_3d.append(np.array([t['center'][0], t['center'][1], z_mid]))
+                
+                # 2. 局部就近吸引引力
                 for i in range(self.num_wolves):
-                    if do_mutation[i]:
-                        new_pos = np.zeros((self.num_waypoints, 3))
-                        if len(targets_3d) > 0:
-                            for j in range(self.num_waypoints):
-                                new_pos[j] = targets_3d[j % len(targets_3d)]
-                        noise = np.random.randn(self.num_waypoints, 3) * 2.0
-                        self.positions[i] = np.clip((new_pos + noise).flatten(), self.lb, self.ub)
+                    if do_mutation[i] and len(targets_3d) > 0:
+                        pts = self.positions[i].reshape((self.num_waypoints, 3))
+                        for target in targets_3d:
+                            # 找出距离这个打卡点最近的那个控制点
+                            distances = np.linalg.norm(pts - target, axis=1)
+                            closest_idx = np.argmin(distances)
+                            # 微创手术：只把这个最近的点，强行拉向打卡点 (80% 的引力)
+                            pts[closest_idx] = pts[closest_idx] * 0.2 + target * 0.8
+                        
+                        # 加上微小扰动，防止大家都卡在同一个点撞墙
+                        noise = np.random.randn(self.num_waypoints, 3) * 0.5
+                        self.positions[i] = np.clip((pts + noise).flatten(), self.lb, self.ub)
+
             else:
                 # ==========================================
-                # 终极大招：用莱维飞行替换高斯噪声！
-                # 乘以 0.01 是为了约束它“超级瞬移”时的物理边界，不让它飞出地球
+                # 正常情况下的莱维飞行变异
                 # ==========================================
-                noise = self._levy_flight((self.num_wolves, self.dim)) * (self.ub - self.lb) * mutation_scale * 0.01
+                noise = self._levy_step((self.num_wolves, self.dim)) * (self.ub - self.lb) * mutation_scale * 0.01
                 
                 if is_emergency:
-                    for d in range(2, self.dim, 3): noise[:, d] += 15.0 
+                    # 紧急状态：不再瞎变异，赋予所有点一个强烈的“向上的势能”
+                    for d in range(2, self.dim, 3): noise[:, d] += 10.0 
                 elif is_lift_up:
-                    for d in range(2, self.dim, 3): noise[:, d] += 8.0  
+                    for d in range(2, self.dim, 3): noise[:, d] += 5.0  
                 elif is_press_down:
-                    for d in range(2, self.dim, 3): noise[:, d] -= 3.0  
+                    for d in range(2, self.dim, 3): noise[:, d] -= 2.0  
                         
                 mutated_pos = self.alpha_pos + noise
-                self.positions[do_mutation] = mutated_pos[do_mutation]
+                self.positions[do_mutation] = np.clip(mutated_pos[do_mutation], self.lb, self.ub)
                 
             # 执行基类的统一物理规则 (拉普拉斯平滑、斥力防擦墙等)
             self.execute_universal_physics_directives()
