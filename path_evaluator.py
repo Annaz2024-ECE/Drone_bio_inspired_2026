@@ -8,10 +8,10 @@ import scipy.interpolate as spl
 class PathEvaluator:
     def __init__(self, randomize_targets=True):
         # 实例化3D环境
-        base_map = 'maps/hard_map.json5'
+        base_map = 'maps/medium_map.json5'
         if randomize_targets:
             # 启动随机模式！
-            map_data = RandomMapGenerator.generate_random_targets(base_map, num_targets=16)
+            map_data = RandomMapGenerator.generate_random_targets(base_map, num_targets=11)
             self.env = UAVEnvironment3D(data_dict=map_data)
         else:
             # 常规固定测试模式
@@ -194,18 +194,39 @@ class PathEvaluator:
     # 感知环境，自动进行限速降挡
     # ==========================================
     def _get_local_speed(self, pt):
-        """ 检测当前点是否在打卡点外围，如果是，强行降速到 5.0 """
         v_cruise = self.params.get('v_cruise', 13.17)
         v_inspection = self.params.get('v_inspection', 5.0)
+        radius_multiplier = 3.0  # 减速影响半径倍数
         
+        # 1. 计算当前点到所有目标点的距离 (XY平面)
+        min_dist_to_target = float('inf')
         for target in self.env.target_areas:
             center_2d = target['center'][:2]
             radius = target['radius']
-            # 只要进入目标半径的 3 倍范围内（提前减速区），就切到 5.0m/s
-            if np.linalg.norm(pt[:2] - center_2d) <= radius * 3.0:
-                return v_inspection
-                
-        return v_cruise
+            # 只考虑 XY 平面距离
+            dist_xy = np.linalg.norm(pt[:2] - center_2d)
+            # 计算“到目标边缘的相对距离”，越小表示越靠近目标
+            relative_dist = dist_xy / radius
+            if relative_dist < min_dist_to_target:
+                min_dist_to_target = relative_dist
+
+        # 2. 如果没有目标，直接返回巡航速度
+        if min_dist_to_target == float('inf'):
+            return v_cruise
+
+        # 3. 核心平滑公式：根据距离比例，线性插值速度
+        # 当 relative_dist <= 1.0 (在目标内部) → 速度 = 5.0
+        # 当 relative_dist >= 3.0 (远离目标) → 速度 = 13.17
+        # 在 1.0 ~ 3.0 之间 → 速度线性变化
+        if min_dist_to_target <= 1.0:
+            return v_inspection
+        elif min_dist_to_target >= radius_multiplier:
+            return v_cruise
+        else:
+            # 线性插值：越靠近目标，速度越接近 5.0
+            t = (min_dist_to_target - 1.0) / (radius_multiplier - 1.0)  # t: 0~1
+            speed = v_inspection + (v_cruise - v_inspection) * t
+            return speed
 
 
     def calculate_fitness(self, path_points):
@@ -369,7 +390,7 @@ class PathEvaluator:
             'ideal_distance': self.ideal_min_distance,
             'obstacle_count': len(self.env.obstacles)
         }
-                
+                 
         total_score = sum(details.values())
         return total_score, details, env_info
 

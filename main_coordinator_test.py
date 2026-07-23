@@ -13,6 +13,7 @@ from ga_planner import GAPlanner
 
 import time
 import os
+import numpy as np
 
 def run_parameter_tuning_loop(run_idx=None, save_dir=None):
     print("=" * 60)
@@ -46,7 +47,7 @@ def run_parameter_tuning_loop(run_idx=None, save_dir=None):
         'evaluator': evaluator,
         # 紫金港地图目标较多，控制点建议调大至 40-50 左右
         # 海宁设置为16 比较合适
-        'num_waypoints': 35, 
+        'num_waypoints': 18, 
         'max_iter': agent.algo_params['max_iter']
        # 'max_iter': 10
     }
@@ -174,6 +175,8 @@ def run_parameter_tuning_loop(run_idx=None, save_dir=None):
         event_history=event_history
     )
 
+    return final_score
+
 # ==========================================
 # 【修改3】主程序：跑 10 次并保存结果
 # ==========================================
@@ -181,15 +184,15 @@ if __name__ == "__main__":
     print("\n 开始底层 3D 寻优，已开启防休眠模式...")
     
     # 创建保存目录
-    save_dir = "SSA_Agent_RandomMap"
+    save_dir = "PSO_Agent_RandomMap"
     os.makedirs(save_dir, exist_ok=True)
     
-    num_runs = 5
+    num_runs = 1
     all_scores = []
     
     for run_idx in range(num_runs):
         print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
-        final_score = run_parameter_tuning_loop(run_idx=run_idx, save_dir=save_dir)
+        final_score = run_parameter_tuning_loop(run_idx=run_idx, save_dir=None)
         all_scores.append(final_score)
     
     # 输出统计汇总

@@ -161,7 +161,7 @@ class SSAPlanner(BasePlanner):
             scout_indices = np.random.choice(self.num_sparrows, self.num_scouts, replace=False)
             for idx in scout_indices:
                 if self.fitness[idx] > self.fitness[sort_indices[0]]:
-                    new_sparrows[idx] = best_pos_current + np.random.randn(self.dim) * np.abs(self.sparrows[idx] - best_pos_current)
+                    new_sparrows[idx] = best_pos_current + self._levy_step(self.dim) * np.abs(self.sparrows[idx] - best_pos_current)
                 else:
                     new_sparrows[idx] = self.sparrows[idx] + np.random.uniform(-1, 1) * (np.abs(self.sparrows[idx] - worst_pos_current) / (self.fitness[idx] - worst_fit_current + 1e-8))
             
@@ -240,19 +240,41 @@ class SSAPlanner(BasePlanner):
                         z_mid = (t.get('z_min', 0.0) + t.get('z_max', 10.0)) / 2.0
                         targets_3d.append(np.array([t['center'][0], t['center'][1], z_mid]))
                     
-                    for i in range(self.num_sparrows):
-                        if do_mutation[i]:
-                            new_pos = np.zeros((self.num_waypoints, 3))
-                            if len(targets_3d) > 0:
-                                for j in range(self.num_waypoints):
-                                    new_pos[j] = targets_3d[j % len(targets_3d)]
+                    # for i in range(self.num_sparrows):
+                    #     if do_mutation[i]:
+                    #         new_pos = np.zeros((self.num_waypoints, 3))
+                    #         if len(targets_3d) > 0:
+                    #             for j in range(self.num_waypoints):
+                    #                 new_pos[j] = targets_3d[j % len(targets_3d)]
                             
-                            noise = np.random.randn(self.num_waypoints, 3) * 2.0
-                            self.sparrows[i] = np.clip((new_pos + noise).flatten(), self.lb, self.ub)
+                    #         noise = np.random.randn(self.num_waypoints, 3) * 2.0
+                    #         self.sparrows[i] = np.clip((new_pos + noise).flatten(), self.lb, self.ub)
                             
-                            # 【核心斩断贪婪陷阱】：无视分数变差，强行更新肉体记忆
-                            full_path = self._decode_path(self.sparrows[i])
-                            self.fitness[i], _, _ = self.evaluator.evaluate_particle(full_path)
+                    #         # 【核心斩断贪婪陷阱】：无视分数变差，强行更新肉体记忆
+                    #         full_path = self._decode_path(self.sparrows[i])
+                    #         self.fitness[i], _, _ = self.evaluator.evaluate_particle(full_path)
+
+                    num_targets = len(targets_3d)
+                    if num_targets > 0:
+                        for i in range(self.num_sparrows):
+                            if do_mutation[i]:
+                                # 获取这只麻雀重塑成 (N, 3) 的基因
+                                current_pts = self.sparrows[i].reshape((self.num_waypoints, 3))
+                                
+                                # 随机选择几个控制点，强行瞬移到各个目标点上
+                                # 这里采用均匀撒点策略，确保每个目标都被覆盖到
+                                step = max(1, self.num_waypoints // num_targets)
+                                for t_idx, target_pt in enumerate(targets_3d):
+                                    wp_idx = (t_idx * step) % self.num_waypoints
+                                    # 瞬移，并加一点小噪音
+                                    current_pts[wp_idx] = target_pt + np.random.randn(3) * 1.0
+                                
+                                # 将修改后的基因拍平存回去
+                                self.sparrows[i] = np.clip(current_pts.flatten(), self.lb, self.ub)
+                                
+                                # 强制更新肉体记忆
+                                full_path = self._decode_path(self.sparrows[i])
+                                self.fitness[i], _, _ = self.evaluator.evaluate_particle(full_path)
                 
                 # 2. 物理推力逻辑 (Z轴强制位移)
                 else:
@@ -267,10 +289,12 @@ class SSAPlanner(BasePlanner):
                     elif is_press_down:
                         for d in range(2, self.dim, 3): noise[:, d] = -3.0 
                     
-                    mutated_sparrows = best_pos_current + noise
+                 #   mutated_sparrows = best_pos_current + noise
                     for i in range(self.num_sparrows):
                         if do_mutation[i]:
-                            self.sparrows[i] = np.clip(mutated_sparrows[i], self.lb, self.ub)
+                            self.sparrows[i] += noise[i]
+                            self.sparrows[i] = np.clip(self.sparrows[i], self.lb, self.ub)
+
                             full_path = self._decode_path(self.sparrows[i])
                             self.fitness[i], _, _ = self.evaluator.evaluate_particle(full_path)
 
@@ -322,13 +346,13 @@ if __name__ == "__main__":
     for run_idx in range(num_runs):
         print(f"\n{'='*20} 第 {run_idx+1}/{num_runs} 次运行 {'='*20}")
         # 注意这里的 num_waypoints 被强制设定成了 30 以上来适应复杂的 3D 拐角
-        planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=100, max_iter=150, num_waypoints=45)
+        planner = SSAPlanner(disturb_ratio=0.5, num_sparrows=80, max_iter=50, num_waypoints=18)
         best_path, history = planner.optimize()
         
         #planner.evaluator.debug_target_coverage(best_path)
         planner.plot_result(best_path, history, algo_name="SSA-3D", run_idx=run_idx, save_dir=None)
         
-        final_score = history[-1] if history else None
-        all_final_scores.append(final_score)
-        with open(os.path.join(save_dir, f"run_{run_idx:02d}_score.txt"), 'w') as f:
-            f.write(f"Final score: {final_score:.2f}\n")
+        # final_score = history[-1] if history else None
+        # all_final_scores.append(final_score)
+        # with open(os.path.join(save_dir, f"run_{run_idx:02d}_score.txt"), 'w') as f:
+        #     f.write(f"Final score: {final_score:.2f}\n")

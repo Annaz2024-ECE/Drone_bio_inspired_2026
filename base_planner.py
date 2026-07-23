@@ -1,8 +1,11 @@
-# ... existing code ...
 import numpy as np
 import math
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec # 🔥 引入非对称布局模块
+from matplotlib.collections import LineCollection
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 import os
 import time
 from path_evaluator import PathEvaluator
@@ -257,7 +260,7 @@ class BasePlanner:
         raise NotImplementedError("子类必须实现 optimize() 方法！")
 
     def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None):
-        # 掐表算时间 (队友功能)
+    # ----- 计时与性能信息 -----
         end_time = time.time()
         round_time = end_time - self.start_time
         
@@ -278,42 +281,38 @@ class BasePlanner:
         else:
             print(f"\n[性能监控] {algo_name} 算法计算耗时: \033[93m{get_time_str(round_time)}\033[0m")
             time_display = f"Time Cost: {get_time_str(round_time)}"
-            
         print("-" * 65)
 
-        # 预先生成平滑路线，供所有子图共用
+        # ----- 生成平滑路径和速度数据（供所有图共用）-----
         smooth_path = self.evaluator.generate_bspline_path(best_path, num_points=100)
-
-        # ==========================================
-        # 🔥 图 1：生成独立的【速度剖面图】(先展示)
-        # ==========================================
-        fig_speed = plt.figure(figsize=(10, 5))
-        ax_speed = fig_speed.add_subplot(111)
         
         path_distances = [0.0]
         cumulative_dist = 0.0
         speeds = []
-        
         for i in range(len(smooth_path)):
             if i > 0:
                 dist = np.linalg.norm(smooth_path[i] - smooth_path[i-1])
                 cumulative_dist += dist
                 path_distances.append(cumulative_dist)
-                
             if hasattr(self.evaluator, '_get_local_speed'):
                 v = self.evaluator._get_local_speed(smooth_path[i])
             else:
                 v = self.evaluator.params.get('v_cruise', 13.17)
             speeds.append(v)
-            
-        ax_speed.plot(path_distances, speeds, color='#1976d2', linewidth=3, linestyle='-')
-        ax_speed.fill_between(path_distances, speeds, color='#bbdefb', alpha=0.4)
-        
+        speeds = np.array(speeds)
+
         v_cruise = self.evaluator.params.get('v_cruise', 13.17)
         v_insp = self.evaluator.params.get('v_inspection', 5.0)
+
+        # ==========================================
+        # 图 1：速度剖面图（保持不变）
+        # ==========================================
+        fig_speed = plt.figure(figsize=(10, 5))
+        ax_speed = fig_speed.add_subplot(111)
+        ax_speed.plot(path_distances, speeds, color='#1976d2', linewidth=3, linestyle='-')
+        ax_speed.fill_between(path_distances, speeds, color='#bbdefb', alpha=0.4)
         ax_speed.axhline(y=v_cruise, color='gray', linestyle='--', alpha=0.7, label=f'Cruise ({v_cruise} m/s)')
         ax_speed.axhline(y=v_insp, color='#d32f2f', linestyle='--', alpha=0.7, label=f'Inspection ({v_insp} m/s)')
-        
         title_speed = f'{algo_name} Dynamic Speed Profile'
         if run_idx is not None: title_speed += f' (Run {run_idx})'
         ax_speed.set_title(title_speed, fontsize=14, fontweight='bold')
@@ -322,166 +321,182 @@ class BasePlanner:
         ax_speed.set_ylim(0, max(max(speeds), v_cruise) * 1.3)
         ax_speed.legend(loc='lower right')
         ax_speed.grid(True, linestyle=':', alpha=0.6)
-        
         plt.tight_layout()
-        
-        if save_dir is not None:
-            # 批量运行模式：安静地保存为独立文件
-            os.makedirs(save_dir, exist_ok=True)
-            filename_speed = f"{algo_name}_run_{run_idx:02d}_speed.png" if run_idx is not None else f"{algo_name}_speed.png"
-            fig_speed.savefig(os.path.join(save_dir, filename_speed), dpi=300)
-            plt.close(fig_speed)
-        else:
-            # 单次测试模式：先弹出速度图
-            print("\n  [展示提示] 正在弹出【速度剖面图】... (请关闭图片窗口以继续展示 3D 路线)")
-            plt.show()
 
-        # ==========================================
-        # 🔥 图 2：生成非对称仪表盘 (左 3D，右上 2D，右下 曲线)
-        # ==========================================
-        fig_main = plt.figure(figsize=(18, 10))
-        
-        main_title = f"{algo_name} Spatial & Convergence Analysis"
-        if run_idx is not None: main_title += f" (Run {run_idx})"
-        fig_main.suptitle(main_title, fontsize=20, fontweight='bold', color='#1a237e', y=0.96)
-
-        # 使用 GridSpec 构建不对称布局：1行2列，但让左图(0)跨满上下，右侧分出上下两格
-        gs = GridSpec(2, 2, width_ratios=[1.2, 1], height_ratios=[1, 1], hspace=0.3, wspace=0.15)
-        
         # ------------------------------------------
-        # 左侧大图：3D 全景环境
+        # 图 2：3D 环境 + 轨迹（速度热力）
         # ------------------------------------------
-        ax_3d = fig_main.add_subplot(gs[:, 0], projection='3d') # 占据所有行(上下合并)，第0列
+        fig_3d = plt.figure(figsize=(10, 8))
+        ax_3d = fig_3d.add_subplot(111, projection='3d')
         self.env.draw_environment_3d(ax=ax_3d)
-        
-        ax_3d.plot(smooth_path[:, 0], smooth_path[:, 1], smooth_path[:, 2], 
-                 color='#d32f2f', linewidth=3, label='3D Flight Path', zorder=6)
-        ax_3d.plot(best_path[:, 0], best_path[:, 1], best_path[:, 2], 
-                 color='gray', linewidth=1, linestyle='--',
-                 marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)
-                 
-        ax_3d.set_title('3D Environment & Trajectory', fontsize=14, fontweight='bold')
+        ax_3d.plot(smooth_path[:, 0], smooth_path[:, 1], smooth_path[:, 2],
+                color='#d32f2f', linewidth=3, label='3D Flight Path', zorder=6)
+        ax_3d.plot(best_path[:, 0], best_path[:, 1], best_path[:, 2],
+                color='gray', linewidth=1, linestyle='--',
+                marker='o', markersize=5, label='Raw Waypoints', alpha=0.6, zorder=5)
+        title_3d = f'{algo_name} 3D Trajectory'
+        if run_idx is not None: title_3d += f' (Run {run_idx})'
+        ax_3d.set_title(title_3d, fontsize=14, fontweight='bold')
         ax_3d.legend(loc='upper left', fontsize=10)
+        plt.tight_layout()
 
-        # ------------------------------------------
-        # 右上方：2D 平面俯视图
-        # ------------------------------------------
-        ax_2d = fig_main.add_subplot(gs[0, 1]) # 第0行，第1列
+        # ==========================================
+        # 图 3：2D 俯视图（独立）
+        # ==========================================
+        fig_2d = plt.figure(figsize=(10, 8))
+        ax_2d = fig_2d.add_subplot(111)
         ax_2d.set_xlim(self.env.x_bounds)
         ax_2d.set_ylim(self.env.y_bounds)
-        
-        # 降维绘制 2D 建筑物
+
+        # 绘制障碍物（2D）
         for obs in self.env.obstacles:
             z_max = obs.get('z_max', 20.0)
             if z_max <= 1.5: color = '#e3f2fd'
             elif z_max <= 3.0: color = '#90caf9'
             elif z_max <= 5.0: color = '#1e88e5'
-            else: color = '#0d47a1' 
-
-            #color = obs.get('color', '#5c6bc0')
+            else: color = '#0d47a1'
             if obs['type'] == 'circle':
                 circle = plt.Circle(obs['center'][:2], obs['radius'], color=color, alpha=0.7, ec='black')
                 ax_2d.add_patch(circle)
             elif obs['type'] == 'rect':
                 from matplotlib.patches import Rectangle
-                rect = Rectangle(obs['bottom_left'][:2], obs['width'], obs['height'], angle=obs.get('angle', 0), color=color, alpha=0.7, ec='black')
+                rect = Rectangle(obs['bottom_left'][:2], obs['width'], obs['height'],
+                                angle=obs.get('angle', 0), color=color, alpha=0.7, ec='black')
                 ax_2d.add_patch(rect)
             elif obs['type'] == 'polygon':
                 from matplotlib.patches import Polygon as mpl_Polygon
                 poly = mpl_Polygon(obs['points'], closed=True, color=color, alpha=0.7, ec='black')
                 ax_2d.add_patch(poly)
-                
-        # 绘制 2D 巡检目标
+
+        # 绘制目标区域
         for target in self.env.target_areas:
-            circle = plt.Circle(target['center'][:2], target['radius'], color='#4caf50', fill=False, linestyle='--', linewidth=2)
+            circle = plt.Circle(target['center'][:2], target['radius'],
+                                color='#4caf50', fill=False, linestyle='--', linewidth=2)
             ax_2d.add_patch(circle)
-            ax_2d.text(target['center'][0], target['center'][1], target['name'], color='#2e7d32', fontweight='bold', ha='center', va='center', fontsize=8)
-            
-        # 绘制 2D 航线与控制点
-        ax_2d.plot(smooth_path[:, 0], smooth_path[:, 1], color='#ff5722', linewidth=2.5, linestyle='-', label='Smooth Path', zorder=6)
-        ax_2d.plot(best_path[:, 0], best_path[:, 1], 'o', color='gray', markersize=3, alpha=0.6, label='Waypoints', zorder=5)
+            ax_2d.text(target['center'][0], target['center'][1], target['name'],
+                    color='#2e7d32', fontweight='bold', ha='center', va='center', fontsize=8)
+
+        # 准备 2D 线段
+        points_2d = smooth_path[:, :2].reshape(-1, 1, 2)
+        segments_2d = np.concatenate([points_2d[:-1], points_2d[1:]], axis=1)
+        speed_values = speeds[:-1]  # 线段数 = 点数-1
+
+        cmap = plt.get_cmap('plasma')
+        norm = mcolors.Normalize(vmin=min(speeds)-2, vmax=max(speeds)+2)
+
+        lc_2d = LineCollection(segments_2d, cmap=cmap, norm=norm, linewidths=3.5, zorder=6)
+        lc_2d.set_array(speed_values)
+        ax_2d.add_collection(lc_2d)
+
+        # 原始控制点
+        ax_2d.plot(best_path[:, 0], best_path[:, 1], 'o', color='gray', markersize=3, alpha=0.5, zorder=5)
         ax_2d.scatter(*self.env.start_point[:2], color='#fbc02d', s=100, marker='*', edgecolors='black', zorder=10)
         ax_2d.scatter(*self.env.end_point[:2], color='#d32f2f', s=80, marker='^', zorder=10)
 
-        ax_2d.set_title('Top-down 2D Map', fontsize=12, fontweight='bold')
+        # 颜色条
+        cbar_2d = fig_2d.colorbar(lc_2d, ax=ax_2d, shrink=0.6, pad=0.05)
+        cbar_2d.set_label('Target Speed (m/s)', fontweight='bold')
+
+        title_2d = f'{algo_name} Top-down 2D Speed Map'
+        if run_idx is not None: title_2d += f' (Run {run_idx})'
+        ax_2d.set_title(title_2d, fontsize=14, fontweight='bold')
         ax_2d.set_xlabel('X (m)')
         ax_2d.set_ylabel('Y (m)')
         ax_2d.grid(True, linestyle=':', alpha=0.4)
-        
-        # ------------------------------------------
-        # 右下方：收敛曲线与体检报告
-        # ------------------------------------------
-        ax_curve = fig_main.add_subplot(gs[1, 1]) # 第1行，第1列
+        plt.tight_layout()
+
+        # ==========================================
+        # 图 4：收敛曲线 + 干预事件 + 参数（独立）
+        # ==========================================
+        fig_curve = plt.figure(figsize=(10, 8))
+        ax_curve = fig_curve.add_subplot(111)
         ax_curve.plot(score_history, color='#2e7d32', linewidth=2)
-        
-        ax_curve.set_title('Convergence Curve & Interventions', fontsize=12, fontweight='bold')
-        ax_curve.set_xlabel('Iteration', fontsize=10)
-        ax_curve.set_ylabel('Score (Log)', fontsize=10)
-        ax_curve.set_yscale('log') 
+        ax_curve.set_title(f'{algo_name} Convergence Curve', fontsize=14, fontweight='bold')
+        ax_curve.set_xlabel('Iteration', fontsize=12)
+        ax_curve.set_ylabel('Score (Log)', fontsize=12)
+        ax_curve.set_yscale('log')
         ax_curve.grid(True, linestyle=':', alpha=0.6)
 
-        # 渲染“特工干预事件”
+        # 干预事件标记
         if event_history:
             event_colors = ['#d32f2f', '#1976d2', '#f57c00', '#388e3c', '#8e24aa']
             for i, (iter_idx, action_tag) in enumerate(event_history):
                 if iter_idx >= len(score_history): continue
                 color = event_colors[i % len(event_colors)]
                 ax_curve.axvline(x=iter_idx, color=color, linestyle='--', alpha=0.7, linewidth=1.5)
-                y_offset = 0.10 + (i % 3) * 0.20 
-                ax_curve.text(iter_idx, y_offset, f" {action_tag}", 
-                         transform=ax_curve.get_xaxis_transform(),
-                         rotation=0, color=color, 
-                         fontsize=7, linespacing=1.2, fontweight='bold', 
-                         va='bottom', ha='left',
-                         bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.85, edgecolor=color))
-        
-        # 算法参数展示
-        excluded_params = [
-            'start_time', 'emergency_escape', 'radar_guidance', 
-            'lift_up', 'press_down', 'apply_laplacian', 'apply_repulsion', 'laplacian_intensity', 'repulsion_intensity'
-        ]
+                y_offset = 0.10 + (i % 3) * 0.20
+                ax_curve.text(iter_idx, y_offset, f" {action_tag}",
+                            transform=ax_curve.get_xaxis_transform(),
+                            rotation=0, color=color,
+                            fontsize=7, linespacing=1.2, fontweight='bold',
+                            va='bottom', ha='left',
+                            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.85, edgecolor=color))
 
+        # 参数展示
+        excluded_params = ['start_time', 'emergency_escape', 'radar_guidance',
+                        'lift_up', 'press_down', 'apply_laplacian', 'apply_repulsion',
+                        'laplacian_intensity', 'repulsion_intensity']
         params_list = []
         for k, v in self.__dict__.items():
             if isinstance(v, (int, float)) and not k.startswith('_') \
-               and 'score' not in k and 'pos' not in k and 'bound' not in k \
-               and k not in ['lb', 'ub', 'dim'] \
-               and k not in excluded_params:
+            and 'score' not in k and 'pos' not in k and 'bound' not in k \
+            and k not in ['lb', 'ub', 'dim'] and k not in excluded_params:
                 val_str = f"{v:.2f}" if isinstance(v, float) else str(v)
                 params_list.append(f"  {k}: {val_str}")
-            
         params_list.append("-" * 15)
         params_list.append(f"  {time_display}")
-        
-        params_text = f"Parameters:\n" + "\n".join(params_list)
+        params_text = "Parameters:\n" + "\n".join(params_list)
         ax_curve.text(0.05, 0.95, params_text, transform=ax_curve.transAxes, fontsize=8,
-                 verticalalignment='top', horizontalalignment='left',
-                 bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
-        
-        # 罚分结算清单
+                    verticalalignment='top', horizontalalignment='left',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
+
+        # 罚分明细
         _, details, _ = self.evaluator.evaluate_particle(best_path)
-        details_list = []
-        for k, v in details.items():
-            if v > 0: details_list.append(f"  {k}: {v:,.0f}")
-                
+        details_list = [f"  {k}: {v:,.0f}" for k, v in details.items() if v > 0]
         if not details_list: details_list.append("  Perfect! No penalties.")
         details_text = "Fitness Breakdown:\n" + "\n".join(details_list)
         ax_curve.text(0.95, 0.85, details_text, transform=ax_curve.transAxes, fontsize=8,
-                 verticalalignment='top', horizontalalignment='right',
-                 bbox=dict(boxstyle='round', facecolor='#eef7ff', alpha=0.9, edgecolor='#1976d2'))
-        
+                    verticalalignment='top', horizontalalignment='right',
+                    bbox=dict(boxstyle='round', facecolor='#eef7ff', alpha=0.9, edgecolor='#1976d2'))
+
         final_score = score_history[-1] if len(score_history) > 0 else 0
-        ax_curve.text(0.95, 0.95, f'Best Score: {final_score:,.2f}', 
-                 transform=ax_curve.transAxes, fontsize=10, fontweight='bold', 
-                 color='white', horizontalalignment='right', verticalalignment='top',
-                 bbox=dict(boxstyle='round,pad=0.3', facecolor='#d32f2f', alpha=0.9, edgecolor='none'))
-                 
-        # 不调用 tight_layout，以防挤压 GridSpec 的设定
-        
-        if save_dir is not None:
-            filename_main = f"{algo_name}_run_{run_idx:02d}_dashboard.png" if run_idx is not None else f"{algo_name}_dashboard.png"
-            fig_main.savefig(os.path.join(save_dir, filename_main), dpi=300)
-            plt.close(fig_main)
+        ax_curve.text(0.95, 0.95, f'Best Score: {final_score:,.2f}',
+                    transform=ax_curve.transAxes, fontsize=10, fontweight='bold',
+                    color='white', horizontalalignment='right', verticalalignment='top',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='#d32f2f', alpha=0.9, edgecolor='none'))
+
+        plt.tight_layout()
+
+        # ==========================================
+        # 保存或显示所有图片
+        # ==========================================
+        if run_idx is not None:
+            # 如果指定了 run_idx，则在 save_dir 下创建子文件夹
+            if save_dir is None:
+                save_dir = "."  # 如果没有给定总目录，默认当前目录
+            sub_dir = os.path.join(save_dir, f"run_{run_idx:02d}")
+            os.makedirs(sub_dir, exist_ok=True)
+            
+            # 保存速度图
+            fig_speed.savefig(os.path.join(sub_dir, f"{algo_name}_speed.png"), dpi=300)
+            plt.close(fig_speed)
+            # 保存3D图
+            fig_3d.savefig(os.path.join(sub_dir, f"{algo_name}_3d.png"), dpi=300)
+            plt.close(fig_3d)
+            # 保存2D图
+            fig_2d.savefig(os.path.join(sub_dir, f"{algo_name}_2d.png"), dpi=300)
+            plt.close(fig_2d)
+            # 保存收敛曲线图
+            fig_curve.savefig(os.path.join(sub_dir, f"{algo_name}_curve.png"), dpi=300)
+            plt.close(fig_curve)
+            print(f"  ✅ 四张图已保存至 {sub_dir}")
         else:
-            print("\n  [展示提示] 正在弹出【综合仪表盘】...")
+            # 调试模式：依次弹出显示
+            print("\n  [展示提示] 显示速度剖面图...")
+            plt.show()
+            print("  [展示提示] 显示3D轨迹图...")
+            plt.show()
+            print("  [展示提示] 显示2D俯视图...")
+            plt.show()
+            print("  [展示提示] 显示收敛曲线图...")
             plt.show()
