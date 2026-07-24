@@ -9,6 +9,7 @@ import matplotlib.colors as mcolors
 import os
 import time
 from path_evaluator import PathEvaluator
+from video_animator import UAVVideoAnimator
 
 class BasePlanner:
     def __init__(self, num_waypoints=10, max_iter=200, evaluator=None):
@@ -490,6 +491,17 @@ class BasePlanner:
             fig_curve.savefig(os.path.join(sub_dir, f"{algo_name}_curve.png"), dpi=300)
             plt.close(fig_curve)
             print(f"  ✅ 四张图已保存至 {sub_dir}")
+
+            # ==========================================
+            # 🔥 新增：直接调用外部的视频渲染器类生成 MP4
+            # ==========================================
+            # 1. 设置视频要保存的绝对路径 (和那 4 张图片存在一起)
+            video_filename = os.path.join(sub_dir, f"{algo_name}_flight.mp4")
+            
+            # 2. 实例化并调用！
+            animator = UAVVideoAnimator(self.evaluator)
+            animator.create_flight_video(best_path, filename=video_filename, duration=18.0)
+            
         else:
             # 调试模式：依次弹出显示
             print("\n  [展示提示] 显示速度剖面图...")

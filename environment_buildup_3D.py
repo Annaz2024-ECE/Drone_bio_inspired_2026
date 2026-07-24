@@ -34,7 +34,7 @@ class UAVEnvironment3D:
 
         # 起点和终点：如果 JSON 中只有二维，默认 Z=0，建议后续传入 [x, y, z]
         def to_3d(point):
-            return np.array(list(point) + [0.0]) if len(point) == 2 else np.array(point)
+            return np.array(list(point) + [1.0]) if len(point) == 2 else np.array(point)
             
         self.start_point = to_3d(data['start_point'])
         self.end_point = to_3d(data['end_point'])
