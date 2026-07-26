@@ -10,7 +10,7 @@
     {"type": "circle", "center": [40, 30], "radius": 6, "z_min": 0.0, "z_max": 5.0},
     {"type": "polygon", "points": [[10, 35], [25, 30], [20, 45]], "z_min": 0.0, "z_max": 1.5},
     {"type": "rect", "bottom_left": [55, 35], "width": 15, "height": 10, "z_min": 0.0, "z_max": 4.5},
-    {"type": "circle", "center": [70, 45], "radius": 5, "z_min": 0.0, "z_max": 2.5},
+    {"type": "circle", "center": [70, 55], "radius": 5, "z_min": 0.0, "z_max": 2.5},
     {"type": "rect", "bottom_left": [15, 50], "width": 20, "height": 8, "z_min": 0.0, "z_max": 3.0},
     {"type": "polygon", "points": [[45, 55], [60, 50], [50, 65]], "z_min": 0.0, "z_max": 4.0},
     {"type": "rect", "bottom_left": [10, 65], "width": 20, "height": 6, "z_min": 0.0, "z_max": 1.5},
