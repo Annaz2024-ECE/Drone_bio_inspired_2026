@@ -53,7 +53,7 @@ def create_planner_with_params(algo_name, evaluator, algo_params, specific_param
 # ==========================================
 # 2. Streamlit 页面配置与状态初始化
 # ==========================================
-st.set_page_config(page_title="具身智能无人机指挥大脑", page_icon="🚁", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="智能体无人机指挥大脑", page_icon="🚁", layout="wide", initial_sidebar_state="expanded")
 
 # 初始化全局状态变量 (解决按钮状态重置问题)
 if 'is_running' not in st.session_state:
