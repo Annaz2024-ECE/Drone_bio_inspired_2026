@@ -260,7 +260,7 @@ class BasePlanner:
         """ [抽象方法] 核心的迭代寻优逻辑，必须由继承的子类自己实现！ """
         raise NotImplementedError("子类必须实现 optimize() 方法！")
 
-    def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None):
+    def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None, return_figs=False):
     # ----- 计时与性能信息 -----
         end_time = time.time()
         round_time = end_time - self.start_time
@@ -344,7 +344,7 @@ class BasePlanner:
         # ==========================================
         # 图 3：2D 俯视图（独立）
         # ==========================================
-        fig_2d = plt.figure(figsize=(10, 8))
+        fig_2d = plt.figure(figsize=(8, 6))
         ax_2d = fig_2d.add_subplot(111)
         ax_2d.set_xlim(self.env.x_bounds)
         ax_2d.set_ylim(self.env.y_bounds)
@@ -409,7 +409,7 @@ class BasePlanner:
         # ==========================================
         # 图 4：收敛曲线 + 干预事件 + 参数（独立）
         # ==========================================
-        fig_curve = plt.figure(figsize=(10, 8))
+        fig_curve = plt.figure(figsize=(8, 6))
         ax_curve = fig_curve.add_subplot(111)
         ax_curve.plot(score_history, color='#2e7d32', linewidth=2)
         ax_curve.set_title(f'{algo_name} Convergence Curve', fontsize=14, fontweight='bold')
@@ -468,6 +468,10 @@ class BasePlanner:
 
         plt.tight_layout()
 
+        # ----- 强制统一轴高度 -----
+        fig_2d.subplots_adjust(left=0.12, right=0.80, top=0.92, bottom=0.24)
+        fig_curve.subplots_adjust(left=0.12, right=0.88, top=0.92, bottom=0.12)
+
         # ==========================================
         # 保存或显示所有图片
         # ==========================================
@@ -489,19 +493,22 @@ class BasePlanner:
             plt.close(fig_2d)
             # 保存收敛曲线图
             fig_curve.savefig(os.path.join(sub_dir, f"{algo_name}_curve.png"), dpi=300)
-            plt.close(fig_curve)
-            print(f"  ✅ 四张图已保存至 {sub_dir}")
 
             # ==========================================
             # 🔥 新增：直接调用外部的视频渲染器类生成 MP4
             # ==========================================
             # 1. 设置视频要保存的绝对路径 (和那 4 张图片存在一起)
-            video_filename = os.path.join(sub_dir, f"{algo_name}_flight.mp4")
+            #video_filename = os.path.join(sub_dir, f"{algo_name}_flight.mp4")
             
             # 2. 实例化并调用！
-            animator = UAVVideoAnimator(self.evaluator)
-            animator.create_flight_video(best_path, filename=video_filename, duration=18.0)
-            
+            # animator = UAVVideoAnimator(self.evaluator)
+            # animator.create_flight_video(best_path, filename=video_filename, duration=18.0)
+             
+        if return_figs:
+            # 返回四个图形对象，供外部（如Streamlit）使用
+            # 注意：不要关闭它们，否则无法显示
+            return fig_speed, fig_3d, fig_2d, fig_curve
+
         else:
             # 调试模式：依次弹出显示
             print("\n  [展示提示] 显示速度剖面图...")

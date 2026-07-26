@@ -125,9 +125,12 @@ class UAVVideoAnimator:
             )
 
             # 动态呈现物理速度
-            status_symbol = "Cruising" if curr_spd > 10.0 else "🔍 Inspecting"
-            ax.set_title(f'UAV 3D Kinematic Simulation | Alt: {curr_pos[2]:.1f}m\n{status_symbol} Speed: {curr_spd:.1f} m/s',
-                         fontsize=14, fontweight='bold', color='#1a237e')
+            status_symbol = "Cruising" if curr_spd > 10.0 else "Inspecting"
+            ax.set_title(
+                f'UAV 3D Kinematic Simulation | Alt: {curr_pos[2]:.1f}m\n{status_symbol} Speed: {curr_spd:.1f} m/s',
+                fontsize=14, fontweight='bold', color='#1a237e',
+                pad=15   # 单位：点（points），增加标题与图形上边框的距离
+            )
 
             return line_history, line_trail, drone_head
 
@@ -136,7 +139,7 @@ class UAVVideoAnimator:
         )
 
         ax.legend(loc='upper left', fontsize=10)
-        plt.tight_layout()
+        plt.tight_layout(rect=[0, 0, 1, 0.93])   # 0.93 表示保留顶部 7% 空间
 
         # ----------------------------------------------------
         # 导出文件
