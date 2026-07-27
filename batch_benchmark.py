@@ -15,13 +15,19 @@ from gwo_planner import GWOPlanner
 from woa_planner import WOAPlanner
 from ga_planner import GAPlanner
 
-def run_single_trial(evaluator, algo_name, use_coordinator, max_iter=10):
+def run_single_trial(evaluator, algo_name, use_coordinator):
     """
     Runs a single optimization trial.
     """
     num_targets = len(evaluator.env.target_areas)
     # A generic heuristic for num_waypoints based on map complexity
     num_waypoints = int(num_targets * 1.5) 
+    if num_targets < 8:
+        max_iter = 50
+    elif num_targets < 11:
+        max_iter = 100
+    else:
+        max_iter = 150
     pop_size = 80 
 
     algo_params = {'pop_size': pop_size, 'max_iter': max_iter, 'num_waypoints': num_waypoints}
