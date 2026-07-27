@@ -100,8 +100,8 @@ def run_batch_tests():
         "Hard": "maps/hard_map.json5"
     }
     
-    algorithms = ["PSO"] # choose from ["PSO", "SSA", "GWO", "WOA", "GA"] 
-    num_runs = 2 # Number of independent trials
+    algorithms = ["PSO", "SSA"] # choose from ["PSO", "SSA", "GWO", "WOA", "GA"] 
+    num_runs = 10 # Number of independent trials
     
     results_ablation = {}
     prior_knowledge_llm = {}
@@ -201,7 +201,9 @@ def run_batch_tests():
                     
                     prior_knowledge_llm[map_name][algo] = {
                         "algorithm_params_used": used_params,
-                        "success_rate_percent": round(success_rate, 1),
+                        "mean_score": mean_score,
+                        "std_score": float(np.std(scores)),
+                        "success_rate": success_rate,
                         "qualitative_evaluation": qualitative,
                         "raw_scores_sample": [round(s, 1) for s in scores]  # 把所有原始分数发给 LLM
                     }
@@ -209,10 +211,10 @@ def run_batch_tests():
     # --- 写入文件 ---
     os.makedirs("results", exist_ok=True)
     
-    with open("results/full_ablation_results.json", "w", encoding='utf-8') as f:
+    with open("full_ablation_results/PSO_SSA.json", "w", encoding='utf-8') as f:
         json.dump(results_ablation, f, indent=4, ensure_ascii=False)
     
-    with open("prior_knowledge.json", "w", encoding='utf-8') as f:
+    with open("prior_knowledge/PSO_SSA.json", "w", encoding='utf-8') as f:
         json.dump(prior_knowledge_llm, f, indent=4, ensure_ascii=False)
     
     print("="*70)
