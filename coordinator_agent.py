@@ -3,7 +3,7 @@ import importlib
 class CoordinatorAgent:
     def __init__(self):
         # 宏观参数
-        self.algo_params = {'pop_size': 20, 'max_iter': 100}
+        self.algo_params = {'pop_size': 55, 'max_iter': 100}
         self.eval_params = {
             'bspline_num_points': 100, 
             'min_waypoint_dist': 5.0,
@@ -115,8 +115,13 @@ class CoordinatorAgent:
         else:
             self.eval_params['max_turn_angle'] = 120.0
             print("  [状态] 危机解除，进入全面精修优化阶段 (合规、平滑、能耗)...")
-            
-            # 【关键改动 3】：重拳治乱！优先解决绕圈死结，再谈精修
+
+            # 算力弹性释放逻辑 
+            if self.algo_params['max_iter'] > 100:
+                old_iter = self.algo_params['max_iter']
+                self.algo_params['max_iter'] = 100
+                actions_taken.append(f"MACRO [算力释放]: 生死危机解除！撤销抢救算力，max_iter 从 {old_iter} 恢复至常态 100，加速精修！")
+            # 重拳治乱！优先解决绕圈死结，再谈精修
             if has_loops:
                 specific_params['shattering_kick'] = True
                 # 强行给底层算法下发超高探索特权，暴力破局

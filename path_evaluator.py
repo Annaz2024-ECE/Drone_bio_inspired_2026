@@ -8,14 +8,7 @@ import scipy.interpolate as spl
 class PathEvaluator:
     def __init__(self, randomize_targets=True):
         # 实例化3D环境
-        base_map = 'maps/medium_map.json5'
-        if randomize_targets:
-            # 启动随机模式！
-            map_data = RandomMapGenerator.generate_random_targets(base_map, num_targets=11)
-            self.env = UAVEnvironment3D(data_dict=map_data)
-        else:
-            # 常规固定测试模式
-            self.env = UAVEnvironment3D(json_path=base_map)
+        self.env = UAVEnvironment3D('maps/easy_map.json5') # 假设你现在跑紫金港
         
         # 基础惩罚权重
         self.penalties = {
@@ -30,7 +23,7 @@ class PathEvaluator:
             'loop_violation': 15000.0,
             # 机动变化功率的惩罚系数 (已大幅下调，配合新版逻辑)
             'change_power_penalty': 10.0,
-            # 新增：时间惩罚权重 (每飞行1秒扣 10 分)
+            # 时间惩罚权重 (每飞行1秒扣 10 分)
             'time_penalty_factor': 10.0
         }
 
@@ -67,7 +60,7 @@ class PathEvaluator:
         return dist
 
     # ==========================================
-    # 新增下面这个方法：用于接收智能体的目标裁剪指令并刷新全局参数
+    # 用于接收智能体的目标裁剪指令并刷新全局参数
     # ==========================================
     def update_env_targets(self, new_targets):
         """ 
@@ -324,9 +317,12 @@ class PathEvaluator:
                 details['pitch_violation'] += self.penalties.get('pitch_violation', 20000.0) * ((pitch - 45.0) / 10.0)
 
             if sfj_safe_segments[i]: continue 
+
+            # 致命碰撞检测 (safe_margin=0.0)
             if self.env.is_segment_collision(p1, p2, safe_margin=0.0):
                 details['fatal_collision'] += fatal_penalty
                 continue 
+            # 安全裕度分层检测 (margin_layers = [0.5, 0.2])
             if not self.env.is_segment_collision(p1, p2, safe_margin=0.5): continue
             for m in margin_layers:
                 if self.env.is_segment_collision(p1, p2, safe_margin=m):

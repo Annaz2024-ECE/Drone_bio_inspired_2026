@@ -47,7 +47,7 @@ def run_parameter_tuning_loop(run_idx=None, save_dir=None):
         'evaluator': evaluator,
         # 紫金港地图目标较多，控制点建议调大至 40-50 左右
         # 海宁设置为16 比较合适
-        'num_waypoints': 18, 
+        'num_waypoints': 12, 
         'max_iter': agent.algo_params['max_iter']
        # 'max_iter': 10
     }
