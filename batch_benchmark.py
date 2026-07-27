@@ -47,7 +47,7 @@ def run_single_trial(evaluator, algo_name, use_coordinator, max_iter=10):
             current_specific_params = {}
             global_best_score = float('inf')
             
-            meta_rounds = 2
+            meta_rounds = 5
 
             for _ in range(meta_rounds): 
                 for key, value in current_specific_params.items():
