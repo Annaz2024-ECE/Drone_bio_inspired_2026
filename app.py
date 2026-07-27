@@ -71,7 +71,7 @@ if 'fig_2d' not in st.session_state:
 if 'fig_curve' not in st.session_state:
     st.session_state.fig_curve = None
 
-st.title("具身智能无人机指挥大脑 (LLM-Assisted UAV Planner)")
+st.title("智能体无人机指挥大脑 (LLM-Assisted UAV Planner)")
 st.markdown("集成 Coordinator Agent 多智能体协同的 3D 复杂空域巡检路径规划系统")
 
 # ==========================================
@@ -172,15 +172,21 @@ if st.session_state.is_running:
             
         evaluator.env = UAVEnvironment3D(selected_map_path) 
         
-        mock_prior_knowledge = {
-            "Easy_Map": {"PSO": "收敛极快，总体最优。"},
-            "Hard_Map_密集障碍": {"SSA": "展现出极强的破壁和脱困能力。"}
-        }
+        prior_knowledge_file = "prior_knowledge.json"
+        if os.path.exists(prior_knowledge_file):
+            with open(prior_knowledge_file, "r", encoding='utf-8') as f:
+                real_prior_knowledge = json.load(f)
+        else:
+            # Fallback if the file hasn't been generated yet
+            real_prior_knowledge = {
+                "Easy_Map": {"PSO": "收敛极快，总体最优。"},
+                "Hard_Map_密集障碍": {"SSA": "展现出极强的破壁能力。"}
+            }
         
         status_text.info("LLM 气象感知智能体评估环境，决断首发阵容...")
         opt_agent = Algorithm_Select_Agent(
             evaluator=evaluator,
-            #prior_knowledge=mock_prior_knowledge,
+            prior_knowledge=real_prior_knowledge,
             rainfall_mm=rainfall_mm, 
             duration_hours=duration_hours, 
             use_llm=use_llm
