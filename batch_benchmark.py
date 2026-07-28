@@ -106,7 +106,7 @@ def run_batch_tests():
         "Hard": "maps/hard_map.json5"
     }
     
-    algorithms = ["PSO", "SSA"] # choose from ["PSO", "SSA", "GWO", "WOA", "GA"] 
+    algorithms = ["PSO", "SSA"]  # choose from ["PSO", "SSA", "GWO", "WOA", "GA"] 
     num_runs = 10 # Number of independent trials
     
     results_ablation = {}
@@ -178,7 +178,7 @@ def run_batch_tests():
                     avg_details[key] = float(np.mean([d.get(key, 0) for d in all_details]))
                 
                 # 当这 30 遍跑完时，原来底部的进度条会消失，并在这里打印最终这组的成绩
-                print(f"✅ 完成! 得分: {mean_score:,.0f} | 成功率: {success_rate:.1f}% | 均碰撞: {avg_collisions:.1f}次 | 均耗时: {avg_time:.1f}s\n")
+                print(f"✅ 完成! 得分: {mean_score:,.0f} | 成功率: {success_rate:.1f}% | 均碰撞: {avg_collisions:.1f}次 | 均漏检: {avg_missed:.1f}次 | 均耗时: {avg_time:.1f}s\n")
                 
                 # ==========================================
                 # 1. 保存给消融实验的完整数据包 (无删减)
