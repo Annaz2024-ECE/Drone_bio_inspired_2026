@@ -284,67 +284,101 @@ if st.session_state.is_running:
             progress_bar.progress(1.0)
             
             output_root = "output"
-            run_idx = 0   # 固定编号，每次运行覆盖
+            run_idx = 0
             run_subdir = os.path.join(output_root, f"run_{run_idx:02d}")
             os.makedirs(run_subdir, exist_ok=True)
 
             video_filename = os.path.join(run_subdir, f"{current_algo_name}_final_flight.mp4")
             
-            # 渲染视频 (这里使用 10 秒加速演示)
             animator = UAVVideoAnimator(evaluator)
             animator.create_flight_video(global_best_path, filename=video_filename, duration=10.0)
 
-            # ---------- 新增：调用 BasePlanner 的绘图方法，获取 2D 图和收敛曲线 ----------
+            # ---------- 调用 BasePlanner 的绘图方法 ----------
             figs = planner.plot_result(
                 best_path=global_best_path,
                 score_history=final_history,
                 algo_name=current_algo_name,
                 event_history=event_history,
-                run_idx=run_idx,                 # 保存到 output/run_00/
+                run_idx=run_idx,
                 save_dir=output_root,
-                return_figs=True                 # 返回图形供显示
+                return_figs=True
             )
-            # 解包：顺序为 speed, 3d, 2d, curve
-            _, _, fig_2d, fig_curve = figs
+            # 现在返回 5 个元素：speed, 3d, 2d, curve, detail_report
+            _, _, fig_2d, fig_curve, detail_report = figs
 
             # 存入 session_state
             st.session_state.fig_2d = fig_2d
             st.session_state.fig_curve = fig_curve
-            # ---------------------------------------------------------------------
+            st.session_state.detail_report = detail_report
 
-            # 将结果存入 session_state
             st.session_state.result_video = video_filename
             st.session_state.result_score = global_best_score
-            st.session_state.result_history = final_history   # 如有需要
+            st.session_state.result_history = final_history
 
     except Exception as e:
         import traceback
         st.error(f"❌ 运行报错: {e}")
         st.code(traceback.format_exc())
     finally:
-        # 重置运行状态，恢复按钮
         st.session_state.is_running = False
         st.session_state.stop_flag = False
 
-# ---------- 结果展示区（独立于运行状态） ----------
+
+# ==========================================
+# 结果展示区（独立于运行状态）
+# ==========================================
 if st.session_state.result_video and os.path.exists(st.session_state.result_video):
     st.success(f"🏁 规划完成！最优得分: {st.session_state.result_score:,.2f}")
     
     # ---------- 第一行：视频 ----------
     st.subheader("🎥 3D 飞行仿真")
-    st.markdown("<br>", unsafe_allow_html=True)   # 增加一个空行，让标题更舒展
-    st.video(st.session_state.result_video)       # 无任何参数，自动填满宽度
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.video(st.session_state.result_video)
     
     # ---------- 第二行：2D图和收敛曲线并排 ----------
-    col_left, col_right = st.columns(2)   # 各占一半宽度
+    col_left, col_right = st.columns(2)
     with col_left:
         st.subheader("🗺️ 2D 速度热力")
         st.pyplot(st.session_state.fig_2d)
         plt.close(st.session_state.fig_2d)
     with col_right:
-        st.subheader("📈 收敛与干预")
+        st.subheader("📈 收敛曲线")
         st.pyplot(st.session_state.fig_curve)
         plt.close(st.session_state.fig_curve)
-        
+    
+    # ==========================================
+    # 【新增】：详细报告折叠面板
+    # ==========================================
+    if hasattr(st.session_state, 'detail_report') and st.session_state.detail_report:
+        with st.expander("📊 查看详细报告（算法参数、Fitness Breakdown、干预事件）"):
+            report = st.session_state.detail_report
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("### ⚙️ 算法参数")
+                if report.get("algorithm_parameters"):
+                    for k, v in report["algorithm_parameters"].items():
+                        st.text(f"  {k}: {v}")
+                else:
+                    st.text("  无参数信息")
+            
+            with col2:
+                st.markdown("### 📉 Fitness Breakdown")
+                if report.get("fitness_breakdown"):
+                    for k, v in report["fitness_breakdown"].items():
+                        st.text(f"  {k}: {v:,.0f}")
+                else:
+                    st.text("  ✅ 完美路径，无惩罚")
+            
+            st.markdown("### 🎯 干预事件记录")
+            if report.get("intervention_events"):
+                for event in report["intervention_events"]:
+                    st.text(f"  Iter {event['iteration']}: {event['action']}")
+            else:
+                st.text("  无干预事件")
+            
+            # 显示时间信息
+            st.caption(f"⏱️ {report.get('time_info', '')}")
+
 else:
     st.info("等待输入指令")

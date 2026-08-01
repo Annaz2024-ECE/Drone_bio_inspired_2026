@@ -10,6 +10,7 @@ import os
 import time
 from path_evaluator import PathEvaluator
 from video_animator import UAVVideoAnimator
+import json
 
 class BasePlanner:
     def __init__(self, num_waypoints=10, max_iter=200, evaluator=None):
@@ -261,7 +262,7 @@ class BasePlanner:
         raise NotImplementedError("子类必须实现 optimize() 方法！")
 
     def plot_result(self, best_path, score_history, algo_name="Algorithm", run_idx=None, save_dir=None, global_start_time=None, event_history=None, return_figs=False):
-    # ----- 计时与性能信息 -----
+        # ----- 计时与性能信息 -----
         end_time = time.time()
         round_time = end_time - self.start_time
         
@@ -380,21 +381,19 @@ class BasePlanner:
         # 准备 2D 线段
         points_2d = smooth_path[:, :2].reshape(-1, 1, 2)
         segments_2d = np.concatenate([points_2d[:-1], points_2d[1:]], axis=1)
-        speed_values = speeds[:-1]  # 线段数 = 点数-1
+        speed_values = speeds[:-1]
 
-        cmap = plt.get_cmap('plasma')
+        cmap = plt.get_cmap('Reds')
         norm = mcolors.Normalize(vmin=min(speeds)-2, vmax=max(speeds)+2)
 
         lc_2d = LineCollection(segments_2d, cmap=cmap, norm=norm, linewidths=3.5, zorder=6)
         lc_2d.set_array(speed_values)
         ax_2d.add_collection(lc_2d)
 
-        # 原始控制点
         ax_2d.plot(best_path[:, 0], best_path[:, 1], 'o', color='gray', markersize=3, alpha=0.5, zorder=5)
         ax_2d.scatter(*self.env.start_point[:2], color='#fbc02d', s=100, marker='*', edgecolors='black', zorder=10)
         ax_2d.scatter(*self.env.end_point[:2], color='#d32f2f', s=80, marker='^', zorder=10)
 
-        # 颜色条
         cbar_2d = fig_2d.colorbar(lc_2d, ax=ax_2d, shrink=0.6, pad=0.05)
         cbar_2d.set_label('Target Speed (m/s)', fontweight='bold')
 
@@ -407,7 +406,8 @@ class BasePlanner:
         plt.tight_layout()
 
         # ==========================================
-        # 图 4：收敛曲线 + 干预事件 + 参数（独立）
+        # ==========================================
+        # 【修改】图 4：简化的收敛曲线（只保留曲线、最终得分、迭代虚线）
         # ==========================================
         fig_curve = plt.figure(figsize=(8, 6))
         ax_curve = fig_curve.add_subplot(111)
@@ -418,51 +418,17 @@ class BasePlanner:
         ax_curve.set_yscale('log')
         ax_curve.grid(True, linestyle=':', alpha=0.6)
 
-        # 干预事件标记
+        # 只保留干预事件的虚线（去掉标签文字）
         if event_history:
-            event_colors = ['#d32f2f', '#1976d2', '#f57c00', '#388e3c', '#8e24aa']
-            for i, (iter_idx, action_tag) in enumerate(event_history):
+            for i, (iter_idx, _) in enumerate(event_history):
                 if iter_idx >= len(score_history): continue
-                color = event_colors[i % len(event_colors)]
+                color = '#1e88e5'  # 统一蓝色虚线
                 ax_curve.axvline(x=iter_idx, color=color, linestyle='--', alpha=0.7, linewidth=1.5)
-                y_offset = 0.10 + (i % 3) * 0.20
-                ax_curve.text(iter_idx, y_offset, f" {action_tag}",
-                            transform=ax_curve.get_xaxis_transform(),
-                            rotation=0, color=color,
-                            fontsize=7, linespacing=1.2, fontweight='bold',
-                            va='bottom', ha='left',
-                            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', alpha=0.85, edgecolor=color))
 
-        # 参数展示
-        excluded_params = ['start_time', 'emergency_escape', 'radar_guidance',
-                        'lift_up', 'press_down', 'apply_laplacian', 'apply_repulsion',
-                        'laplacian_intensity', 'repulsion_intensity']
-        params_list = []
-        for k, v in self.__dict__.items():
-            if isinstance(v, (int, float)) and not k.startswith('_') \
-            and 'score' not in k and 'pos' not in k and 'bound' not in k \
-            and k not in ['lb', 'ub', 'dim'] and k not in excluded_params:
-                val_str = f"{v:.2f}" if isinstance(v, float) else str(v)
-                params_list.append(f"  {k}: {val_str}")
-        params_list.append("-" * 15)
-        params_list.append(f"  {time_display}")
-        params_text = "Parameters:\n" + "\n".join(params_list)
-        ax_curve.text(0.05, 0.95, params_text, transform=ax_curve.transAxes, fontsize=8,
-                    verticalalignment='top', horizontalalignment='left',
-                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='gray'))
-
-        # 罚分明细
-        _, details, _ = self.evaluator.evaluate_particle(best_path)
-        details_list = [f"  {k}: {v:,.0f}" for k, v in details.items() if v > 0]
-        if not details_list: details_list.append("  Perfect! No penalties.")
-        details_text = "Fitness Breakdown:\n" + "\n".join(details_list)
-        ax_curve.text(0.95, 0.85, details_text, transform=ax_curve.transAxes, fontsize=8,
-                    verticalalignment='top', horizontalalignment='right',
-                    bbox=dict(boxstyle='round', facecolor='#eef7ff', alpha=0.9, edgecolor='#1976d2'))
-
+        # 只显示最终得分
         final_score = score_history[-1] if len(score_history) > 0 else 0
         ax_curve.text(0.95, 0.95, f'Best Score: {final_score:,.2f}',
-                    transform=ax_curve.transAxes, fontsize=10, fontweight='bold',
+                    transform=ax_curve.transAxes, fontsize=12, fontweight='bold',
                     color='white', horizontalalignment='right', verticalalignment='top',
                     bbox=dict(boxstyle='round,pad=0.3', facecolor='#d32f2f', alpha=0.9, edgecolor='none'))
 
@@ -473,44 +439,74 @@ class BasePlanner:
         fig_curve.subplots_adjust(left=0.12, right=0.88, top=0.92, bottom=0.12)
 
         # ==========================================
-        # 保存或显示所有图片
+        # 【新增】生成详细报告（算法参数、Fitness Breakdown、干预事件）
+        # ==========================================
+        detail_report = {
+            "algorithm": algo_name,
+            "best_score": final_score,
+            "time_info": time_display,
+            "algorithm_parameters": {},
+            "fitness_breakdown": {},
+            "intervention_events": []
+        }
+        
+        # 收集算法参数（排除内部变量）
+        excluded_params = ['start_time', 'emergency_escape', 'radar_guidance',
+                        'lift_up', 'press_down', 'apply_laplacian', 'apply_repulsion',
+                        'laplacian_intensity', 'repulsion_intensity']
+        for k, v in self.__dict__.items():
+            if isinstance(v, (int, float)) and not k.startswith('_') \
+            and 'score' not in k and 'pos' not in k and 'bound' not in k \
+            and k not in ['lb', 'ub', 'dim'] and k not in excluded_params:
+                val_str = f"{v:.2f}" if isinstance(v, float) else str(v)
+                detail_report["algorithm_parameters"][k] = val_str
+        
+        # 收集 Fitness Breakdown
+        _, details, _ = self.evaluator.evaluate_particle(best_path)
+        for k, v in details.items():
+            if v > 0:
+                detail_report["fitness_breakdown"][k] = float(v)
+        
+        # 收集干预事件
+        if event_history:
+            for iter_idx, action_tag in event_history:
+                if iter_idx < len(score_history):
+                    detail_report["intervention_events"].append({
+                        "iteration": iter_idx,
+                        "action": action_tag
+                    })
+        
+        # 保存详细报告到 JSON 文件
+        if run_idx is not None:
+            if save_dir is None:
+                save_dir = "."
+            sub_dir = os.path.join(save_dir, f"run_{run_idx:02d}")
+            os.makedirs(sub_dir, exist_ok=True)
+            report_path = os.path.join(sub_dir, f"{algo_name}_detail_report.json")
+            with open(report_path, "w", encoding='utf-8') as f:
+                json.dump(detail_report, f, indent=4, ensure_ascii=False)
+
+        # ==========================================
+        # 保存所有图片
         # ==========================================
         if run_idx is not None:
-            # 如果指定了 run_idx，则在 save_dir 下创建子文件夹
             if save_dir is None:
-                save_dir = "."  # 如果没有给定总目录，默认当前目录
+                save_dir = "."
             sub_dir = os.path.join(save_dir, f"run_{run_idx:02d}")
             os.makedirs(sub_dir, exist_ok=True)
             
-            # 保存速度图
             fig_speed.savefig(os.path.join(sub_dir, f"{algo_name}_speed.png"), dpi=300)
             plt.close(fig_speed)
-            # 保存3D图
             fig_3d.savefig(os.path.join(sub_dir, f"{algo_name}_3d.png"), dpi=300)
             plt.close(fig_3d)
-            # 保存2D图
             fig_2d.savefig(os.path.join(sub_dir, f"{algo_name}_2d.png"), dpi=300)
-            plt.close(fig_2d)
-            # 保存收敛曲线图
-            fig_curve.savefig(os.path.join(sub_dir, f"{algo_name}_curve.png"), dpi=300)
-
-            # ==========================================
-            # 🔥 新增：直接调用外部的视频渲染器类生成 MP4
-            # ==========================================
-            # 1. 设置视频要保存的绝对路径 (和那 4 张图片存在一起)
-            #video_filename = os.path.join(sub_dir, f"{algo_name}_flight.mp4")
+            # 注意：不关闭 fig_curve，因为要返回给前端显示
             
-            # 2. 实例化并调用！
-            # animator = UAVVideoAnimator(self.evaluator)
-            # animator.create_flight_video(best_path, filename=video_filename, duration=18.0)
-             
         if return_figs:
-            # 返回四个图形对象，供外部（如Streamlit）使用
-            # 注意：不要关闭它们，否则无法显示
-            return fig_speed, fig_3d, fig_2d, fig_curve
-
+            # 返回四个图形对象，供外部使用
+            return fig_speed, fig_3d, fig_2d, fig_curve, detail_report
         else:
-            # 调试模式：依次弹出显示
+            # 调试模式
             print("\n  [展示提示] 显示速度剖面图...")
             plt.show()
             print("  [展示提示] 显示3D轨迹图...")
