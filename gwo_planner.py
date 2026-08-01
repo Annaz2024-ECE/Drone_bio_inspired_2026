@@ -34,7 +34,7 @@ class GWOPlanner(BasePlanner):
         positions = np.zeros((self.num_wolves, self.dim))
         
         # 1. 呼叫基类的贪心算法，生成完美拓扑骨架（超级狼！）
-        super_wolf = self._generate_heuristic_skeleton()
+        super_wolf = self._generate_basic_skeleton()
         
         # 2. 将这只超级狼直接设为第 0 号狼（内定开局 Alpha 狼候选）
         positions[0] = super_wolf
