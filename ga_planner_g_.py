@@ -4,7 +4,7 @@ import math
 from base_planner import BasePlanner
 
 class GAPlanner(BasePlanner):
-    def __init__(self, num_waypoints=10, max_iter=200, evaluator=None, pop_size=40, pc=0.80, pm=0.15):
+    def __init__(self, num_waypoints=10, max_iter=200, evaluator=None, pop_size=50, pc=0.85, pm=0.50):
         """
         3D 连续空间遗传算法 (实数编码 - 满血联动版)
         """
@@ -21,7 +21,6 @@ class GAPlanner(BasePlanner):
         self.fitness = np.full(self.pop_size, float("inf"))
         
         # 3. 显式声明 Agent（老中医）会动态篡改的专属参数与物理开关
-        # 防止 main_coordinator_test.py 执行 setattr 时找不到属性报错
         self.emergency_escape = False 
         self.radar_guidance = False
         self.press_down = False       
@@ -30,36 +29,78 @@ class GAPlanner(BasePlanner):
         self.apply_repulsion = False
 
         # 4. 动态提取 JSON 中的 3D 巡检目标点 (先验知识)
-        self.target_anchors = []
+        target_anchors_list = []
         if hasattr(self.env, 'target_areas') and self.env.target_areas:
             for target in self.env.target_areas:
-                # 提取 XY 坐标中心
                 center_x, center_y = target['center'][:2]
-                # 计算 3D 空间的中位安全打卡高度，默认取 4.0 到 8.0 之间的均值
                 z_mid = (target.get('z_min', 4.0) + target.get('z_max', 8.0)) / 2.0
-                self.target_anchors.append([center_x, center_y, z_mid])
-        self.target_anchors = np.array(self.target_anchors)
+                target_anchors_list.append([center_x, center_y, z_mid])
+                
+        self.target_anchors = np.array(target_anchors_list) if len(target_anchors_list) > 0 else np.empty((0, 3))
     
-    
-    def _initialize_population(self):
-        """ 初始化多梯队种群，实施分级分批的先验基因注入 """
+    def _get_topologically_sorted_anchors(self):
+        """ 按照最近邻 (Nearest Neighbor) 对打卡点进行空间拓扑排序，消除折返 """
+        if len(self.target_anchors) == 0:
+            return np.empty((0, 3))
+            
+        # 兼容性获取起点坐标
+        if hasattr(self.env, 'start_point'):
+            start_pos = np.array(self.env.start_point)
+        elif hasattr(self.env, 'start_pos'):
+            sp = self.env.start_pos
+            start_pos = np.array([sp['x'], sp['y'], sp['z']]) if isinstance(sp, dict) else np.array(sp)
+        else:
+            start_pos = np.zeros(3)
+
+        unvisited = list(self.target_anchors.copy())
+        sorted_anchors = []
         
-        # 个体 0：注入基类的【常规启发式直线骨架】(保留直飞备用基因)
+        curr = start_pos
+        while unvisited:
+            dists = [np.linalg.norm(np.array(p) - curr) for p in unvisited]
+            nearest_idx = np.argmin(dists)
+            nearest_node = unvisited.pop(nearest_idx)
+            sorted_anchors.append(nearest_node)
+            curr = np.array(nearest_node)
+            
+        return np.array(sorted_anchors)
+
+    def _initialize_population(self):
+        """ 多梯队种群初始化：精英骨架 + 拓扑注入 + 全域随机探索 """
+        
+        # 1. 个体 0：注入基础骨架（TSP + 线性插值保底）
         self.positions[0] = self._generate_basic_skeleton()
         
-        # 剩余个体实施生态策略分配
+        # 2. 准备打卡点拓扑排序与分布插槽
+        sorted_anchors = self._get_topologically_sorted_anchors()
+        num_anchors = len(sorted_anchors)
+        
+        # 计算打卡点分配索引（防止插槽溢出）
+        if num_anchors > 0 and self.num_waypoints > 2:
+            usable_slots = self.num_waypoints - 2
+            anchor_indices = np.linspace(1, usable_slots, min(num_anchors, usable_slots), dtype=int)
+        else:
+            anchor_indices = np.array([], dtype=int)
+
+        top_30_count = int(self.pop_size * 0.3)
+        sigma = (self.ub - self.lb) * 0.05
+
+        # 3. 多梯队种群分配
         for i in range(1, self.pop_size):
-            if i < int(self.pop_size * 0.8):
-                # 策略 A (前 80%)：在【官方巡检骨架】附近实施微小的高斯微调
-                # 产生大体方向正确、但局部产生绕行的护卫梯队，专门负责微调探索避障盲区
-                sigma = (self.ub - self.lb) * 0.03  # 3% 的微小扰动
-                self.positions[i] = self.positions[0] + np.random.normal(0, sigma, self.dim)
-                self.positions[i] = np.clip(self.positions[i], self.lb, self.ub)
+            if i < top_30_count:
+                # 梯队 A (1 ~ 30%)：基于骨架微调 + 强行拓扑打卡点注入 (局部精修)
+                noisy_pos = self.positions[0] + np.random.normal(0, sigma, self.dim)
+                waypoints = noisy_pos.reshape(self.num_waypoints, 3)
+                
+                if len(anchor_indices) > 0:
+                    for idx, anchor in zip(anchor_indices, sorted_anchors[:len(anchor_indices)]):
+                        waypoints[idx] = anchor
+                        
+                self.positions[i] = np.clip(waypoints.flatten(), self.lb, self.ub)
             else:
-                # 策略 B (后 20%)：全图完全随机撒点
-                # 维持物种多样性，负责在盲区撞运气，防止算法早期产生局部定势
-                self.positions[i] = np.random.uniform(self.lb, self.ub)
-             
+                # 梯队 B (30% ~ 100%)：全图均匀随机撒点，保留全局探索能力，避免早熟/跳不出障碍物
+                self.positions[i] = np.random.uniform(self.lb, self.ub, self.dim)
+
     def _tournament_selection(self):
         """ 锦标赛选择算子：随机挑选两个互相竞争，保留适应度更低(更好)的个体 """
         new_positions = np.zeros_like(self.positions)
@@ -70,51 +111,43 @@ class GAPlanner(BasePlanner):
         self.positions = new_positions
 
     def _arithmetic_crossover(self):
-        """ 算术交叉算子：完美契合连续空间时序基因，生成父母之间的平滑中间路径 """
+        """ 算术交叉算子：连续空间基因融合 """
         for i in range(0, self.pop_size, 2):
             if i + 1 < self.pop_size and np.random.rand() < self.pc:
-                # 随机生成各个维度的插值系数向量 alpha
                 alpha = np.random.rand(self.dim)
-                
                 p1 = self.positions[i].copy()
                 p2 = self.positions[i+1].copy()
                 
-                # 双向线性基因融合
                 self.positions[i] = alpha * p1 + (1 - alpha) * p2
                 self.positions[i+1] = alpha * p2 + (1 - alpha) * p1
                 
-                # 边界约束截断
                 self.positions[i] = np.clip(self.positions[i], self.lb, self.ub)
                 self.positions[i+1] = np.clip(self.positions[i+1], self.lb, self.ub)
 
     def _hybrid_mutation(self):
-        """ 【升级】混合变异算子：常规高斯微调 + 危机时刻莱维飞行跳跃 """
+        """ 带有保护机制与雷达引力拉回的混合变异算子 """
         for i in range(self.pop_size):
             if np.random.rand() < self.pm:
-                # 如果 Agent 下发了紧急逃生指令，或者变异率 pm 调得很高 (如 > 0.2)
+                # 逃生/高变异率 -> 莱维飞行大跨步；常态 -> 高斯微调
                 if getattr(self, 'emergency_escape', False) or self.pm > 0.2:
-                    # 调用父类 BasePlanner 的莱维飞行算子（产生长尾大步长 jump）
                     levy_step = self._levy_step(self.dim)
                     scale = (self.ub - self.lb) * getattr(self, 'levy_scale', 0.05)
                     mutation_step = levy_step * scale
                 else:
-                    # 正常精细雕刻阶段：使用高斯小步长扰动
                     sigma = (self.ub - self.lb) * 0.03
                     mutation_step = np.random.normal(0, sigma, self.dim)
                     
                 self.positions[i] += mutation_step
                 self.positions[i] = np.clip(self.positions[i], self.lb, self.ub)
                 
-    # def _gaussian_mutation(self):
-    #     """ 高斯变异算子：对连续空间航点坐标进行局部扰动 """
-    #     for i in range(self.pop_size):
-    #         if np.random.rand() < self.pm:
-    #             # 以 5% 的边界全幅作为标准差生成高斯噪声进行航线打磨
-    #             sigma = (self.ub - self.lb) * 0.05
-    #             mutation_step = np.random.normal(0, sigma, self.dim)
-                
-    #             self.positions[i] += mutation_step
-    #             self.positions[i] = np.clip(self.positions[i], self.lb, self.ub)
+                # 雷达空投/漏打卡强力引力修正
+                if getattr(self, 'radar_guidance', False) and len(self.target_anchors) > 0:
+                    waypoints = self.positions[i].reshape(self.num_waypoints, 3)
+                    target = self.target_anchors[np.random.choice(len(self.target_anchors))]
+                    dists = np.linalg.norm(waypoints - target, axis=1)
+                    closest_wpt_idx = np.argmin(dists)
+                    waypoints[closest_wpt_idx] = 0.5 * waypoints[closest_wpt_idx] + 0.5 * target
+                    self.positions[i] = waypoints.flatten()
 
     def optimize(self, callback=None):
         """
@@ -128,7 +161,7 @@ class GAPlanner(BasePlanner):
         best_env_info_for_coord = None
 
         for t in range(self.max_iter):
-            # 1.1 评估种群适应度 (单线程顺序执行，碰撞检测极其精准)
+            # 1.1 评估种群适应度
             for i in range(self.pop_size):
                 path = self._decode_path(self.positions[i])
                 
@@ -143,15 +176,14 @@ class GAPlanner(BasePlanner):
                     best_details_for_coord = details
                     best_env_info_for_coord = env_info
 
-            # 精英保留策略 (Elitism)：强制保留历史第一的王牌，防止变异导致优秀退化
-            # 我们将当前种群中最差的一个人，替换成历史最优个体
+            # 精英保留策略 (Elitism)：替换最差个体为历史最优
             worst_idx = np.argmax(self.fitness)
             self.positions[worst_idx] = self.historical_best_pos.copy()
             self.fitness[worst_idx] = self.historical_best_score
 
             self.convergence_curve.append(self.historical_best_score)
 
-            # 2. 核心大招：无缝切脉对接 CoordinatorAgent (老中医实时调参)
+            # 2. 对接 CoordinatorAgent 调参
             if callback and best_details_for_coord is not None:
                 algo_params, eval_params, specific_params, is_finished = callback(
                     self.historical_best_score, 
@@ -168,17 +200,16 @@ class GAPlanner(BasePlanner):
                 self.apply_laplacian = specific_params.get('apply_laplacian', False)
                 self.apply_repulsion = specific_params.get('apply_repulsion', False)
                 
-                # 将宏观放宽限制等调参指令同步更新给底层评价器
+                # 将调参指令同步更新给底层评价器
                 self.evaluator.update_params(new_params=eval_params)
                 
-                # 如果老中医觉得得分已经完美（如达到0分或不再收敛），直接提前出关
                 if is_finished:
                     break
 
-            # 3. 执行通用物理机制 (调用基类的拉普拉斯平滑、障碍物斥力武器)
+            # 3. 执行通用物理机制
             self.execute_universal_physics_directives()
 
-            # 4. GA 仿生学遗传演化 (锦标赛选择 -> 算术交叉 -> 高斯突变)
+            # 4. GA 仿生学遗传演化 (锦标赛选择 -> 算术交叉 -> 混合变异)
             self._tournament_selection()
             self._arithmetic_crossover()
             self._hybrid_mutation()
@@ -196,7 +227,7 @@ if __name__ == "__main__":
     start_time = time.time()
     
     # 实例化规划器
-    planner = GAPlanner(num_waypoints=20, pop_size=40, max_iter=300, pc=0.8, pm=0.2)
+    planner = GAPlanner(num_waypoints=30, pop_size=40, max_iter=100, pc=0.85, pm=0.2)
     
     # 运行单体优化 (此时无 callback，跑纯粹的 GA 演化)
     best_path, convergence_history = planner.optimize()

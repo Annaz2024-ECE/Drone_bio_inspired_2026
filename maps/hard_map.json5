@@ -58,7 +58,7 @@
   ],
   "target_areas": [
     // 16 个目标，半径 2.0 ~ 6.0，散布于广场、大楼缝隙和空地之间
-    {"center": [55.0, 30.0], "radius": 4.0, "name": "H1"},
+    {"center": [55.0, 35.0], "radius": 4.0, "name": "H1"},
     {"center": [100.0, 35.0], "radius": 3.0, "name": "H2"},
     {"center": [155.0, 30.0], "radius": 5.0, "name": "H3"},
     {"center": [35.0, 75.0], "radius": 2.0, "name": "H4"},

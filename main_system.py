@@ -6,8 +6,8 @@ import time
 from pso_planner import PSOPlanner
 from ssa_planner import SSAPlanner
 from gwo_planner import GWOPlanner
-from woa_planner_fix import WOAPlanner
-from ga_planner import GAPlanner
+from woa_planner import WOAPlanner
+from ga_plannerold import GAPlanner
 #from dsaco_planner import DSACOPlanner
 from hybrid_pso_gwo import HybridPSOGWO
 

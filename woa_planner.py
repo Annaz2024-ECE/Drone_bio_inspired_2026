@@ -4,7 +4,7 @@ import time
 from base_planner import BasePlanner
 
 class WOAPlanner(BasePlanner):
-    def __init__(self, evaluator=None, num_waypoints=25, pop_size=20, max_iter=200):
+    def __init__(self, evaluator=None, num_waypoints=25, pop_size=40, max_iter=200):
         super().__init__(num_waypoints=num_waypoints, max_iter=max_iter, evaluator=evaluator)
         # 【适配 Agent 修改 1】：显式声明 Agent 会动态篡改的专属参数/开关
         # 防止 main_coordinator_test.py 执行 setattr 时报错
@@ -17,7 +17,7 @@ class WOAPlanner(BasePlanner):
         self.apply_repulsion = False
 
         self.pop_size = pop_size
-        #self.positions = np.random.uniform(self.lb, self.ub, (self.pop_size, self.dim))
+        self.positions = np.random.uniform(self.lb, self.ub, (self.pop_size, self.dim))
         self.top_30_percent = int(self.pop_size * 0.3)
         
         #动态提取 JSON 中的 3D 巡检目标点
@@ -27,7 +27,7 @@ class WOAPlanner(BasePlanner):
             z_mid = (target.get('z_min', 4.0) + target.get('z_max', 8.0)) / 2.0
             self.target_anchors.append([center_x, center_y, z_mid])
         # 【优化 1】：参考论文，将纯随机初始化升级为“混合莱维飞行初始化”
-        self.positions = self._hybrid_initialization()
+        # self.positions = self._hybrid_initialization()
         # 调参
         self.b = 1.0
         self.levy_scale = 0.05
@@ -36,25 +36,25 @@ class WOAPlanner(BasePlanner):
     
     
     
-    def _hybrid_initialization(self):
-        """
-        混合初始化：50% 传统随机分布，50% 施加莱维飞行大步长扰动
-        """
-        positions = np.zeros((self.pop_size, self.dim))
+    # def _hybrid_initialization(self):
+    #     """
+    #     混合初始化：50% 传统随机分布，50% 施加莱维飞行大步长扰动
+    #     """
+    #     positions = np.zeros((self.pop_size, self.dim))
         
-        # 前 50% 保持传统的均匀随机分布
-        m1 = int(self.pop_size * 0.5)
-        positions[:m1, :] = np.random.uniform(self.lb, self.ub, (m1, self.dim))
+    #     # 前 50% 保持传统的均匀随机分布
+    #     m1 = int(self.pop_size * 0.5)
+    #     positions[:m1, :] = np.random.uniform(self.lb, self.ub, (m1, self.dim))
         
-        # 后 50% 引入莱维飞行扰动，拓宽开局时航线在 3D 空间中的广度
-        for i in range(m1, self.pop_size):
-            base_pos = np.random.uniform(self.lb, self.ub, self.dim)
-            levy_factor = self._levy_step(self.dim)
-            # 扰动强度设为地图跨度的 10%，既能大跳又不会完全失控
-            perturbed_pos = base_pos + levy_factor * 0.1 * (self.ub - self.lb)
-            positions[i, :] = np.clip(perturbed_pos, self.lb, self.ub)
+    #     # 后 50% 引入莱维飞行扰动，拓宽开局时航线在 3D 空间中的广度
+    #     for i in range(m1, self.pop_size):
+    #         base_pos = np.random.uniform(self.lb, self.ub, self.dim)
+    #         levy_factor = self._levy_step(self.dim)
+    #         # 扰动强度设为地图跨度的 10%，既能大跳又不会完全失控
+    #         perturbed_pos = base_pos + levy_factor * 0.1 * (self.ub - self.lb)
+    #         positions[i, :] = np.clip(perturbed_pos, self.lb, self.ub)
             
-        return positions
+    #     return positions
 
     def _decode_path(self, position):
         """
@@ -168,7 +168,7 @@ class WOAPlanner(BasePlanner):
 if __name__ == "__main__":
     start_time = time.time()  # 记录起点时间
     # 建议航点数至少大于等于目标区域数量 (haining.json5 中有 11 个 target)
-    planner = WOAPlanner(num_waypoints=20, pop_size=20, max_iter=50)
+    planner = WOAPlanner(num_waypoints=25, pop_size=40, max_iter=10)
     
     best_path, convergence_history = planner.optimize()
     
