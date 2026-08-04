@@ -11,6 +11,7 @@ import time
 from path_evaluator import PathEvaluator
 from video_animator import UAVVideoAnimator
 import json
+from matplotlib.patches import Patch   # 用于创建图例色块
 
 class BasePlanner:
     def __init__(self, num_waypoints=10, max_iter=200, evaluator=None):
@@ -340,12 +341,25 @@ class BasePlanner:
         if run_idx is not None: title_3d += f' (Run {run_idx})'
         ax_3d.set_title(title_3d, fontsize=14, fontweight='bold')
         ax_3d.legend(loc='upper left', fontsize=10)
+
+        # ===== 新增：障碍物高度图例（第二个图例） =====
+        obs_patches = [
+            Patch(facecolor='#e3f2fd', edgecolor='black', label='Height ≤ 1.5m'),
+            Patch(facecolor='#90caf9', edgecolor='black', label='1.5m < H ≤ 3.0m'),
+            Patch(facecolor='#1e88e5', edgecolor='black', label='3.0m < H ≤ 5.0m'),
+            Patch(facecolor='#0d47a1', edgecolor='black', label='H > 5.0m')
+        ]
+        leg_obs = ax_3d.legend(handles=obs_patches, title='Obstacle Height',
+                               loc='lower right', fontsize=8)
+        ax_3d.add_artist(leg_obs)   # 关键：将第二个图例添加到轴中
+        # ===========================================
+
         plt.tight_layout()
 
         # ==========================================
         # 图 3：2D 俯视图（独立）
         # ==========================================
-        fig_2d = plt.figure(figsize=(8, 6))
+        fig_2d = plt.figure(figsize=(6, 4))
         ax_2d = fig_2d.add_subplot(111)
         ax_2d.set_xlim(self.env.x_bounds)
         ax_2d.set_ylim(self.env.y_bounds)
@@ -403,13 +417,33 @@ class BasePlanner:
         ax_2d.set_xlabel('X (m)')
         ax_2d.set_ylabel('Y (m)')
         ax_2d.grid(True, linestyle=':', alpha=0.4)
-        plt.tight_layout()
+
+        # ===== 新增：障碍物高度图例 =====
+        obs_patches_2d = [
+            Patch(facecolor='#e3f2fd', edgecolor='black', label='Height ≤ 1.5m'),
+            Patch(facecolor='#90caf9', edgecolor='black', label='1.5m < H ≤ 3.0m'),
+            Patch(facecolor='#1e88e5', edgecolor='black', label='3.0m < H ≤ 5.0m'),
+            Patch(facecolor='#0d47a1', edgecolor='black', label='H > 5.0m')
+        ]
+        obs_legend = ax_2d.legend(
+            handles=obs_patches_2d,
+            title='Obstacle Height',
+            bbox_to_anchor=(1.02, 0.92),     # 放在右侧，与右上角对齐
+            loc='lower left',
+            fontsize=6,
+            title_fontsize=7,
+            handlelength=1.0,
+            handleheight=0.8
+        )
+        plt.subplots_adjust(right=0.78)   # 右侧留出约 22% 空白
+        # 或者使用 tight_layout 的 rect 参数
+        plt.tight_layout(rect=[0, 0, 0.78, 1])
 
         # ==========================================
         # ==========================================
         # 【修改】图 4：简化的收敛曲线（只保留曲线、最终得分、迭代虚线）
         # ==========================================
-        fig_curve = plt.figure(figsize=(8, 6))
+        fig_curve = plt.figure(figsize=(6, 4))
         ax_curve = fig_curve.add_subplot(111)
         ax_curve.plot(score_history, color='#2e7d32', linewidth=2)
         ax_curve.set_title(f'{algo_name} Convergence Curve', fontsize=14, fontweight='bold')
