@@ -105,24 +105,34 @@ def run_single_trial(evaluator, algo_name, use_coordinator):
     return final_score, exec_time, is_success, details, collision_count, missed_count, algo_params
 
 
-def save_results(results_ablation, prior_knowledge_llm, suffix=""):
+# ---------- 新增：保存原始运行数据的函数 ----------
+def save_raw_runs(map_name, algo, mode_name, raw_runs_list):
     """
-    增量保存结果到 JSON 文件
+    保存每次运行的详细信息（score, details, seed 等）到独立文件。
+    路径: full_ablation_results/raw_runs/{map_name}/{algo}/{mode_name}.json
     """
-    os.makedirs("full_ablation_results", exist_ok=True)
-    os.makedirs("prior_knowledge", exist_ok=True)
-    
-    # 保存消融实验结果
-    ablation_file = f"full_ablation_results/all_algorithms{suffix}.json"
-    with open(ablation_file, "w", encoding='utf-8') as f:
-        json.dump(results_ablation, f, indent=4, ensure_ascii=False)
-    
-    # 保存先验知识
-    prior_file = f"prior_knowledge/all_algorithms{suffix}.json"
-    with open(prior_file, "w", encoding='utf-8') as f:
-        json.dump(prior_knowledge_llm, f, indent=4, ensure_ascii=False)
+    dir_path = os.path.join("full_ablation_results", "raw_runs", map_name, algo)
+    os.makedirs(dir_path, exist_ok=True)
+    file_path = os.path.join(dir_path, f"{mode_name}.json")
+    # 将 numpy 类型转为 Python 原生类型以便 JSON 序列化
+    def convert_to_native(obj):
+        if isinstance(obj, (np.floating, float)):
+            return float(obj)
+        if isinstance(obj, (np.integer, int)):
+            return int(obj)
+        if isinstance(obj, dict):
+            return {k: convert_to_native(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [convert_to_native(v) for v in obj]
+        return obj
+
+    cleaned_list = convert_to_native(raw_runs_list)
+    with open(file_path, "w", encoding='utf-8') as f:
+        json.dump(cleaned_list, f, indent=4, ensure_ascii=False)
+    print(f"   💾 原始运行数据已保存至 {file_path}")
 
 
+# ---------- 修改后的 run_batch_tests ----------
 def run_batch_tests():
     maps = {
         "Easy": "maps/easy_map.json5",
@@ -130,8 +140,8 @@ def run_batch_tests():
         "Hard": "maps/hard_map.json5"
     }
 
-    algorithms = ["PSO", "SSA", "GWO", "WOA", "GA"]
-    num_runs = 15
+    algorithms = ["PSO", "SSA"] # ["PSO", "SSA", "GWO", "WOA", "GA"]
+    num_runs = 3
 
     results_ablation = {}
     prior_knowledge_llm = {}
@@ -139,11 +149,10 @@ def run_batch_tests():
     total_tasks = len(maps) * len(algorithms) * 2
     current_task = 0
 
-    # ============================================================
-    # 【新增】：检查是否有之前的保存文件，支持断点续传
-    # ============================================================
+    # 断点续传相关
     checkpoint_file = "full_ablation_results/checkpoint.json"
     start_from_scratch = True
+    completed_set = set()
     
     if os.path.exists(checkpoint_file):
         try:
@@ -152,32 +161,27 @@ def run_batch_tests():
                 completed_tasks = checkpoint_data.get("completed_tasks", [])
                 print(f"\n📂 发现之前的检查点文件，已完成 {len(completed_tasks)} 组任务")
                 print(f"   已完成: {completed_tasks}")
-                
-                # 询问是否继续
                 response = input("   是否从检查点继续？(y/n): ").strip().lower()
                 if response == 'y':
                     start_from_scratch = False
-                    # 加载已有的结果
+                    # 加载已有的主结果
                     if os.path.exists("full_ablation_results/all_algorithms.json"):
                         with open("full_ablation_results/all_algorithms.json", "r", encoding='utf-8') as f:
                             results_ablation = json.load(f)
                     if os.path.exists("prior_knowledge/all_algorithms.json"):
                         with open("prior_knowledge/all_algorithms.json", "r", encoding='utf-8') as f:
                             prior_knowledge_llm = json.load(f)
-                    
-                    # 标记已完成的任务
                     completed_set = set(completed_tasks)
                 else:
                     print("   从头开始运行...")
         except Exception as e:
-            print(f"   ⚠️ 读取检查点失败: {e}，从头开始...")
+            print(f"   读取检查点失败: {e}，从头开始...")
 
     print("\n" + "=" * 70)
     print(f"启动大批量 Benchmark (共 {total_tasks} 组任务, 每组 {num_runs} 次运行)")
     print("=" * 70 + "\n")
 
-    # 用于记录已完成任务的列表（用于检查点）
-    completed_tasks = []
+    completed_tasks = []  # 用于记录本次运行完成的任务（用于检查点）
 
     for map_idx, (map_name, map_path) in enumerate(maps.items(), 1):
         if not os.path.exists(map_path):
@@ -188,7 +192,6 @@ def run_batch_tests():
         evaluator = PathEvaluator()
         evaluator.env = UAVEnvironment3D(map_path)
 
-        # 如果从检查点恢复，需要确保数据结构存在
         if map_name not in results_ablation:
             results_ablation[map_name] = {}
         if map_name not in prior_knowledge_llm:
@@ -204,25 +207,17 @@ def run_batch_tests():
 
             for use_agent, mode_name in [(False, "Baseline"), (True, "With_Coordinator")]:
                 current_task += 1
-                
-                # ============================================================
-                # 【新增】：检查这个任务是否已经完成
-                # ============================================================
                 task_key = f"{map_name}_{algo}_{mode_name}"
                 
                 if not start_from_scratch and task_key in completed_set:
                     print(f"\n   ⏭️ 跳过已完成任务: {task_key}")
                     continue
 
-                # ============================================================
-                # 使用并行运行 num_runs 次试验
-                # ============================================================
-                num_workers = min(num_runs, 15)  # 改为 8 更合适你的 CPU
-                
+                # 并行执行 num_runs 次试验
+                num_workers = min(num_runs, 15)
                 trial_func = partial(run_single_trial_wrapper, evaluator, algo, use_agent)
                 seeds = list(range(num_runs))
 
-                # 显示当前任务信息
                 progress_pct = (current_task - 1) / total_tasks * 100
                 print("-" * 65)
                 print(f"🚀 [总体进度: {current_task}/{total_tasks} ({progress_pct:.1f}%)]")
@@ -230,13 +225,13 @@ def run_batch_tests():
                 print(f"   并行启动 {num_runs} 次试验 (使用 {num_workers} 个工作线程)...")
                 print("-" * 65)
 
-                # 存储结果
                 scores = []
                 times = []
                 all_details = []
                 collisions_history = []
                 missed_history = []
-                success_count = 0
+                success_flags = []
+                raw_runs = []          # 新增：存储每次运行的详细信息
                 used_params = {}
 
                 with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
@@ -256,39 +251,54 @@ def run_batch_tests():
                             all_details.append(details)
                             collisions_history.append(coll_c)
                             missed_history.append(miss_c)
+                            success_flags.append(success)
                             used_params = params
-                            if success:
-                                success_count += 1
+                            
+                            # 构建原始运行记录
+                            raw_runs.append({
+                                "seed": seed,
+                                "score": float(score),
+                                "success": bool(success),
+                                "collision_count": int(coll_c),
+                                "missed_count": int(miss_c),
+                                "exec_time": float(ex_time),
+                                "details": {k: float(v) if isinstance(v, (np.floating, float)) else v 
+                                            for k, v in details.items()}
+                            })
                             
                             completed += 1
                             if completed % max(1, num_runs // 10) == 0 or completed == num_runs:
                                 print(f"   [进度] {completed}/{num_runs} 完成", end="\r")
                                 
                         except Exception as e:
-                            print(f"\n   ⚠️ 试验 (seed={seed}) 失败: {e}")
+                            print(f"\n   试验 (seed={seed}) 失败: {e}")
                             completed += 1
-                    
                     print()
 
-                # --- 数据聚合 ---
                 if len(scores) == 0:
-                    print(f"   ⚠️ 所有试验都失败了，跳过此组")
+                    print(f"   所有试验都失败了，跳过此组")
                     continue
-                    
+
+                # --- 数据聚合 ---
                 mean_score = float(np.mean(scores))
-                success_rate = (success_count / num_runs) * 100
+                success_rate = (sum(success_flags) / num_runs) * 100
                 avg_time = float(np.mean(times))
                 avg_collisions = float(np.mean(collisions_history))
                 avg_missed = float(np.mean(missed_history))
 
+                # 计算 fitness breakdown 均值和标准差
                 avg_details = {}
+                std_details = {}
                 if all_details:
-                    for key in all_details[0].keys():
-                        avg_details[key] = float(np.mean([d.get(key, 0) for d in all_details]))
+                    keys = all_details[0].keys()
+                    for key in keys:
+                        values = [d.get(key, 0) for d in all_details]
+                        avg_details[key] = float(np.mean(values))
+                        std_details[key] = float(np.std(values))
 
                 print(f"✅ 完成! 得分: {mean_score:,.0f} | 成功率: {success_rate:.1f}% | 均碰撞: {avg_collisions:.1f}次 | 均漏检: {avg_missed:.1f}次 | 均耗时: {avg_time:.1f}s\n")
 
-                # --- 保存结果到内存 ---
+                # --- 保存消融结果（增加 std_fitness_breakdown） ---
                 results_ablation[map_name][algo][mode_name] = {
                     "used_params": used_params,
                     "mean_score": mean_score,
@@ -297,10 +307,11 @@ def run_batch_tests():
                     "success_rate": success_rate,
                     "avg_collisions_count": avg_collisions,
                     "avg_missed_targets_count": avg_missed,
-                    "raw_scores": scores,
-                    "average_fitness_breakdown": avg_details
+                    "average_fitness_breakdown": avg_details,
+                    "std_fitness_breakdown": std_details          # 新增
                 }
 
+                # --- 保存先验知识 ---
                 if mode_name == "With_Coordinator":
                     qualitative = "表现中等。"
                     if success_rate >= 90 and avg_collisions < 0.2:
@@ -317,13 +328,11 @@ def run_batch_tests():
                         "raw_scores_sample": [round(s, 1) for s in scores] if scores else []
                     }
 
-                # ============================================================
-                # 【关键修改】：每完成一组就立即保存文件
-                # ============================================================
-                # 记录已完成的任务
+                # --- 新增：保存原始运行数据到独立文件 ---
+                save_raw_runs(map_name, algo, mode_name, raw_runs)
+
+                # --- 检查点与主结果保存 ---
                 completed_tasks.append(task_key)
-                
-                # 保存检查点（记录已完成的任务列表）
                 checkpoint_data = {
                     "completed_tasks": completed_tasks,
                     "last_update": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -332,15 +341,12 @@ def run_batch_tests():
                 os.makedirs("full_ablation_results", exist_ok=True)
                 with open("full_ablation_results/checkpoint.json", "w", encoding='utf-8') as f:
                     json.dump(checkpoint_data, f, indent=4, ensure_ascii=False)
-                
-                # 保存完整结果
-                save_results(results_ablation, prior_knowledge_llm)
+
+                save_results(results_ablation, prior_knowledge_llm, suffix="")
                 print(f"   💾 数据已保存 (已完成 {len(completed_tasks)}/{total_tasks} 组)")
 
-    # --- 最终保存 ---
-    save_results(results_ablation, prior_knowledge_llm)
-    
-    # 删除检查点文件（所有任务已完成）
+    # 最终保存
+    save_results(results_ablation, prior_knowledge_llm, suffix="")
     if os.path.exists("full_ablation_results/checkpoint.json"):
         os.remove("full_ablation_results/checkpoint.json")
 
@@ -348,7 +354,22 @@ def run_batch_tests():
     print("🎉 Benchmark 全部完成！")
     print("✅ 消融实验全量数据已保存至 'full_ablation_results/all_algorithms.json'")
     print("✅ LLM 先验知识库已保存至 'prior_knowledge/all_algorithms.json'")
+    print("✅ 每次运行的原始数据已保存至 'full_ablation_results/raw_runs/' 下")
     print("=" * 70)
+
+
+# 保存主结果的函数（保持不变）
+def save_results(results_ablation, prior_knowledge_llm, suffix=""):
+    os.makedirs("full_ablation_results", exist_ok=True)
+    os.makedirs("prior_knowledge", exist_ok=True)
+    
+    ablation_file = f"full_ablation_results/all_algorithms{suffix}.json"
+    with open(ablation_file, "w", encoding='utf-8') as f:
+        json.dump(results_ablation, f, indent=4, ensure_ascii=False)
+    
+    prior_file = f"prior_knowledge/all_algorithms{suffix}.json"
+    with open(prior_file, "w", encoding='utf-8') as f:
+        json.dump(prior_knowledge_llm, f, indent=4, ensure_ascii=False)
 
 
 if __name__ == "__main__":
