@@ -1,0 +1,353 @@
+{
+    "Easy": {
+        "PSO": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 50,
+                "num_waypoints": 9
+            },
+            "mean_score": 41359.50528909145,
+            "std_score": 1286.958462711016,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                41719.7,
+                40189.3,
+                40130.5,
+                40313.3,
+                39351.1,
+                41906.2,
+                41563.3,
+                43796.6,
+                41907.0,
+                42717.9
+            ]
+        },
+        "SSA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 50,
+                "num_waypoints": 9
+            },
+            "mean_score": 30571.05664572045,
+            "std_score": 7799.714364384761,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                24550.0,
+                25825.2,
+                26610.5,
+                40298.1,
+                24688.5,
+                42054.0,
+                25317.8,
+                26385.3,
+                44702.3,
+                25278.9
+            ]
+        },
+        "GWO": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 50,
+                "num_waypoints": 9
+            },
+            "mean_score": 29250.359192472377,
+            "std_score": 5290.888128141502,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                26504.2,
+                27263.5,
+                42460.2,
+                27500.2,
+                25872.0,
+                25550.6,
+                26580.2,
+                26439.0,
+                28059.7,
+                36274.0
+            ]
+        },
+        "WOA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 50,
+                "num_waypoints": 9
+            },
+            "mean_score": 40035.98620725997,
+            "std_score": 5195.533234070768,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                51888.4,
+                39943.2,
+                33427.3,
+                37176.5,
+                34348.8,
+                36586.3,
+                38748.5,
+                41558.4,
+                41401.4,
+                45281.1
+            ]
+        },
+        "GA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 50,
+                "num_waypoints": 9
+            },
+            "mean_score": 30664.536923475516,
+            "std_score": 1326.3181087482599,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                32588.5,
+                29747.0,
+                31331.8,
+                27808.2,
+                30798.5,
+                31365.3,
+                31422.9,
+                31371.9,
+                31162.8,
+                29048.6
+            ]
+        }
+    },
+    "Medium": {
+        "PSO": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 16
+            },
+            "mean_score": 53806.95728503559,
+            "std_score": 8187.943708902456,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                48833.3,
+                46458.5,
+                54110.9,
+                48252.8,
+                47154.1,
+                48017.5,
+                71655.8,
+                62506.8,
+                49109.7,
+                61970.1
+            ]
+        },
+        "SSA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 16
+            },
+            "mean_score": 217197.02327507394,
+            "std_score": 299011.283290229,
+            "success_rate": 80.0,
+            "qualitative_evaluation": "表现中等。",
+            "raw_scores_sample": [
+                45462.4,
+                94718.0,
+                728828.4,
+                56835.9,
+                891313.8,
+                74660.1,
+                70205.3,
+                72720.2,
+                49686.3,
+                87539.9
+            ]
+        },
+        "GWO": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 16
+            },
+            "mean_score": 576254.835273273,
+            "std_score": 423228.5217897377,
+            "success_rate": 40.0,
+            "qualitative_evaluation": "表现中等。",
+            "raw_scores_sample": [
+                69052.8,
+                593873.0,
+                55474.4,
+                635414.7,
+                579451.9,
+                1216695.6,
+                1107198.1,
+                132439.9,
+                1102168.4,
+                270779.6
+            ]
+        },
+        "WOA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 16
+            },
+            "mean_score": 46185.46702117035,
+            "std_score": 4723.757822351648,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                45075.8,
+                48289.8,
+                53290.2,
+                46426.3,
+                45510.6,
+                35368.0,
+                49563.2,
+                44449.3,
+                42823.2,
+                51058.3
+            ]
+        },
+        "GA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 16
+            },
+            "mean_score": 273226.26621012465,
+            "std_score": 259608.874897417,
+            "success_rate": 70.0,
+            "qualitative_evaluation": "表现中等。",
+            "raw_scores_sample": [
+                679908.3,
+                657821.4,
+                192687.7,
+                81895.0,
+                662781.9,
+                85734.3,
+                76043.3,
+                106496.6,
+                99883.0,
+                89011.2
+            ]
+        }
+    },
+    "Hard": {
+        "PSO": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 24
+            },
+            "mean_score": 46758.54083181059,
+            "std_score": 4529.791824953246,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                47055.7,
+                45502.9,
+                45282.2,
+                44293.4,
+                45659.9,
+                44170.8,
+                45387.4,
+                45240.2,
+                44837.0,
+                60155.8
+            ]
+        },
+        "SSA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 24
+            },
+            "mean_score": 113648.824888456,
+            "std_score": 175354.41711216304,
+            "success_rate": 90.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                47844.9,
+                47501.7,
+                47139.9,
+                44888.0,
+                45007.5,
+                50335.0,
+                638136.0,
+                68962.0,
+                56299.6,
+                90373.8
+            ]
+        },
+        "GWO": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 24
+            },
+            "mean_score": 46847.80155967243,
+            "std_score": 3757.98821379159,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                51363.1,
+                46518.5,
+                45712.2,
+                50778.9,
+                48682.9,
+                44727.4,
+                46468.9,
+                47140.4,
+                49627.6,
+                37458.1
+            ]
+        },
+        "WOA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 24
+            },
+            "mean_score": 54283.20492403077,
+            "std_score": 2116.821596185359,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                55319.8,
+                51632.2,
+                57701.9,
+                52522.2,
+                52011.5,
+                51648.1,
+                54342.0,
+                57058.2,
+                55139.5,
+                55456.5
+            ]
+        },
+        "GA": {
+            "algorithm_params_used": {
+                "pop_size": 80,
+                "max_iter": 150,
+                "num_waypoints": 24
+            },
+            "mean_score": 57274.456170140475,
+            "std_score": 5004.3418755266375,
+            "success_rate": 100.0,
+            "qualitative_evaluation": "成功率极高，避障能力完美，极度稳定。",
+            "raw_scores_sample": [
+                52529.1,
+                58285.8,
+                54542.9,
+                53923.3,
+                49616.1,
+                54121.1,
+                57590.4,
+                64356.0,
+                62934.0,
+                64845.9
+            ]
+        }
+    }
+}
