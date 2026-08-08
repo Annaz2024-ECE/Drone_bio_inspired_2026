@@ -34,7 +34,7 @@ class PathEvaluator:
             'min_waypoint_dist': 5.0,
             'margin_layers': [0.5, 0.2],
             # 能耗物理学参数
-            'v_cruise': 13.17,        # 巡航最佳速度
+            'v_cruise': 13.17,        # 巡航最佳速度 m/s
             'v_inspection': 5.0,      # 巡检打卡时的低速模式
             'accel_threshold': 2.0    # 最大合理加速度 2.0m/s^2
         }
@@ -252,7 +252,7 @@ class PathEvaluator:
         P_cruise = c_parasite * (v_cruise**3) + c_induced * (1/v_cruise)
         time_flight_est = total_dist / v_cruise
 
-        time_factor = self.penalties.get('time_penalty_factor', 100.0)
+        time_factor = self.penalties.get('time_penalty_factor', 10.0)
         details['time_cost'] = time_flight_est * time_factor 
         
         E_base = 2000.0 
@@ -352,7 +352,7 @@ class PathEvaluator:
             v_prev_local = self._get_local_speed(p_prev)
             v_curr_local = self._get_local_speed(p_curr)
             
-            dist_seg = np.linalg.norm(p_curr - p_prev)
+            dist_seg = np.linalg.norm(p_curr - p_prev)*10 # 比例尺
             dist_seg = max(dist_seg, 0.5)  # 防爆锁，防止除以 0
             
             # 2. 使用平均速度计算通过这段航段的真实时间 dt
